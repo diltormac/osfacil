@@ -32,6 +32,87 @@ let corReforma = "";
 let numeroOSReforma = "";
 let numeroOSConserto = "";
 
+// Array para armazenar os múltiplos serviços da OS
+let itensOS = [];
+
+// Botão para adicionar o item atual à lista
+const btnAdicionarItem = document.getElementById("btnAdicionarItem");
+const containerItens = document.getElementById("containerItensAdicionados");
+
+btnAdicionarItem.onclick = () => {
+  const serv = inputServico.value;
+  if (!serv) return; // Se estiver vazio, apenas sai sem dar erro estrito
+
+  const qtd = parseInt(inputQuantidade.value) || 1;
+  const valTexto = valor.value.replace(/[^\d]/g, "");
+  const valNum = valTexto ? parseFloat(valTexto) / 100 : 0;
+
+  itensOS.push({
+    servico: serv,
+    quantidade: qtd,
+    valor: valNum,
+    cor: corReforma || null,
+    numero_os: numeroOSReforma || null,
+    numero_os_conserto: numeroOSConserto || null,
+  });
+
+  inputServico.value = "";
+  fakeServico.innerText = "Selec.";
+  inputQuantidade.value = "1";
+  fakeQuantidade.innerText = "1";
+  valor.value = "";
+  corReforma = "";
+  numeroOSReforma = "";
+  numeroOSConserto = "";
+
+  renderizarItensOS();
+  atualizarProgresso();
+
+  // ATUALIZA A OBSERVAÇÃO AUTOMATICAMENTE
+  const resumoNomes = itensOS.map((i) => i.servico).join(", ");
+  observacao.value = `SERVIÇOS: ${resumoNomes}`.toUpperCase();
+  validarObservacao();
+};
+
+function renderizarItensOS() {
+  containerItens.innerHTML = "";
+
+  if (itensOS.length === 0) {
+    containerItens.innerHTML = `<p class="text-[11px] text-slate-400 italic text-center py-1">Nenhum serviço adicionado ainda. Preencha acima e clique em Adicionar.</p>`;
+    return;
+  }
+
+  itensOS.forEach((item, index) => {
+    const div = document.createElement("div");
+    div.className =
+      "flex items-center justify-between bg-slate-50 border border-slate-200 rounded-lg p-2 text-xs";
+    div.innerHTML = `
+      <div class="flex flex-col">
+        <span class="font-bold text-slate-800">${item.servico} (Qtd: ${item.quantidade})</span>
+        <span class="text-slate-500">R$ ${item.valor.toFixed(2).replace(".", ",")}</span>
+      </div>
+      <button type="button" onclick="removerItemOS(${index})" class="text-red-500 hover:text-red-700 p-1">
+        <i class="fa-solid fa-trash-can"></i>
+      </button>
+    `;
+    containerItens.appendChild(div);
+  });
+}
+
+window.removerItemOS = function (index) {
+  itensOS.splice(index, 1);
+  renderizarItensOS();
+  atualizarProgresso();
+
+  if (itensOS.length > 0) {
+    const resumoNomes = itensOS.map((i) => i.servico).join(", ");
+    observacao.value = `SERVIÇOS: ${resumoNomes}`.toUpperCase();
+  } else {
+    observacao.value = "";
+  }
+  validarObservacao();
+};
+
 // Identificação
 function verificarIdentificacaoAparelho() {
   if (
@@ -68,7 +149,6 @@ document.getElementById("triggerAlterarNome").onclick = () => {
 
 verificarIdentificacaoAparelho();
 
-// Modal de Detalhes
 async function abrirModalDetalhesServico() {
   const servicoSelecionado = inputServico.value;
   const grupoCor = document.getElementById("grupoCorModal");
@@ -79,48 +159,64 @@ async function abrirModalDetalhesServico() {
   inputCor.classList.remove("is-invalid");
   inputNum.classList.remove("is-invalid");
 
-  if (servicoSelecionado === "REFORMA") {
+  const servicoUpper = (servicoSelecionado || "").toUpperCase();
+  const isReforma = servicoUpper === "REFORMA";
+  const isConsertoOuSolda =
+    servicoUpper === "CONSERTO" ||
+    servicoUpper === "SOLDA" ||
+    servicoUpper === "CONSERTO/SOLDA";
+
+  if (isReforma) {
     tituloModal.innerHTML = `<i class="fa-solid fa-spray-can-sparkles text-indigo-600 mr-1"></i> Detalhes da Reforma`;
     grupoCor.style.display = "block";
     inputCor.value = corReforma || "";
     inputNum.value = numeroOSReforma || "";
-  } else if (servicoSelecionado === "CONSERTO/SOLDA") {
-    tituloModal.innerHTML = `<i class="fa-solid fa-wrench text-indigo-600 mr-1"></i> Detalhes do Conserto/Solda`;
+  } else if (isConsertoOuSolda) {
+    tituloModal.innerHTML = `<i class="fa-solid fa-wrench text-indigo-600 mr-1"></i> Detalhes do Serviço`;
     grupoCor.style.display = "none";
     inputCor.value = "";
     inputNum.value = numeroOSConserto || "";
   }
 
   document.getElementById("modalDetalhesServico").classList.add("show");
-  if (servicoSelecionado === "REFORMA") {
+  if (isReforma) {
     setTimeout(() => inputCor.focus(), 150);
   } else {
     setTimeout(() => inputNum.focus(), 150);
   }
 
   if (
-    (servicoSelecionado === "REFORMA" && !numeroOSReforma) ||
-    (servicoSelecionado === "CONSERTO/SOLDA" && !numeroOSConserto)
+    (isReforma && !numeroOSReforma) ||
+    (isConsertoOuSolda && !numeroOSConserto)
   ) {
     inputNum.placeholder = "Buscando...";
     inputNum.disabled = true;
 
     try {
-      let maxNum = servicoSelecionado === "CONSERTO/SOLDA" ? 6142 : 0;
+      let maxNum = isReforma ? 0 : 6142;
 
       if (navigator.onLine) {
-        const colunaBusca =
-          servicoSelecionado === "REFORMA" ? "numero_os" : "numero_os_conserto";
-        const { data } = await supabaseClient
-          .from("ordens_servico")
-          .select(colunaBusca)
-          .eq("servico", servicoSelecionado)
-          .not(colunaBusca, "is", null)
-          .neq(colunaBusca, "");
+        let query = supabaseClient.from("ordens_servico").select("*");
+
+        if (isReforma) {
+          query = query
+            .eq("servico", "REFORMA")
+            .not("numero_os", "is", null)
+            .neq("numero_os", "");
+        } else {
+          query = query
+            .in("servico", ["CONSERTO", "SOLDA", "CONSERTO/SOLDA"])
+            .not("numero_os_conserto", "is", null)
+            .neq("numero_os_conserto", "");
+        }
+
+        const { data } = await query;
 
         if (data) {
           data.forEach((item) => {
-            const valItem = item[colunaBusca];
+            const valItem = isReforma
+              ? item.numero_os
+              : item.numero_os_conserto;
             if (valItem) {
               const num = parseInt(valItem.toString().replace(/\D/g, ""));
               if (!isNaN(num) && num > maxNum) maxNum = num;
@@ -133,11 +229,20 @@ async function abrirModalDetalhesServico() {
         localStorage.getItem("@osfacil_pendentes") || "[]",
       );
       pendentes.forEach((p) => {
-        if (p.dados.servico === servicoSelecionado) {
-          const valItem =
-            servicoSelecionado === "REFORMA"
-              ? p.dados.numero_os
-              : p.dados.numero_os_conserto;
+        const servP = (p.dados.servico || "").toUpperCase();
+        if (isReforma && servP === "REFORMA") {
+          const valItem = p.dados.numero_os;
+          if (valItem) {
+            const num = parseInt(valItem.toString().replace(/\D/g, ""));
+            if (!isNaN(num) && num > maxNum) maxNum = num;
+          }
+        } else if (
+          !isReforma &&
+          (servP === "CONSERTO" ||
+            servP === "SOLDA" ||
+            servP === "CONSERTO/SOLDA")
+        ) {
+          const valItem = p.dados.numero_os_conserto;
           if (valItem) {
             const num = parseInt(valItem.toString().replace(/\D/g, ""));
             if (!isNaN(num) && num > maxNum) maxNum = num;
@@ -145,11 +250,14 @@ async function abrirModalDetalhesServico() {
         }
       });
 
-      const proximoNum =
-        maxNum >= 6143 ? maxNum + 1 : Math.max(6143, maxNum + 1);
+      const proximoNum = isReforma
+        ? maxNum + 1
+        : maxNum >= 6143
+          ? maxNum + 1
+          : Math.max(6143, maxNum + 1);
       inputNum.value = proximoNum.toString();
 
-      if (servicoSelecionado === "REFORMA") {
+      if (isReforma) {
         numeroOSReforma = inputNum.value;
       } else {
         numeroOSConserto = inputNum.value;
@@ -239,8 +347,10 @@ btnDDI.onclick = () => {
 
 // Modais de Opções
 const opcoesServico = [
-  "Alinhar/Balancear",
-  "Conserto/Solda",
+  "Alinhamento",
+  "Balanceamento",
+  "Conserto",
+  "Solda",
   "Escapamento",
   "Mecanica",
   "Reforma",
@@ -285,19 +395,23 @@ function selecionarOpcao(valorSelecionado) {
     inputServico.value = valorSelecionado;
     fakeServico.innerText = valorSelecionado;
 
-    if (valorSelecionado !== "Reforma") {
+    const servUpper = valorSelecionado.toUpperCase();
+
+    if (servUpper !== "REFORMA") {
       corReforma = "";
       numeroOSReforma = "";
     }
-    if (valorSelecionado !== "Conserto/Solda") {
+    if (servUpper !== "CONSERTO" && servUpper !== "SOLDA") {
       numeroOSConserto = "";
     }
 
     validarServico();
 
     const tabelaPrecos = {
-      "Alinhar/Balancear": 50,
-      "Conserto/Solda": 150,
+      Alinhamento: 50,
+      Balanceamento: 50,
+      Conserto: 150,
+      Solda: 150,
       Escapamento: 200,
       Mecanica: 200,
       Reforma: 200,
@@ -311,8 +425,9 @@ function selecionarOpcao(valorSelecionado) {
     }
 
     if (
-      valorSelecionado === "Reforma" ||
-      valorSelecionado === "Conserto/Solda"
+      servUpper === "REFORMA" ||
+      servUpper === "CONSERTO" ||
+      servUpper === "SOLDA"
     ) {
       document.getElementById("customModal").classList.remove("show");
       abrirModalDetalhesServico();
@@ -346,6 +461,43 @@ function mostrarToast(mensagem, tipo = "sucesso") {
   }, 4000);
 }
 
+// Função auxiliar para garantir o preenchimento automático da observação ao interagir
+function verificarEPreencherObservacao() {
+  const serv = inputServico.value;
+  const qtd = parseInt(inputQuantidade.value) || 1;
+  const valTexto = valor.value.replace(/[^\d]/g, "");
+  const valNum = valTexto ? parseFloat(valTexto) / 100 : 0;
+
+  if (serv && valNum > 0) {
+    itensOS.push({
+      servico: serv,
+      quantidade: qtd,
+      valor: valNum,
+      cor: corReforma || null,
+      numero_os: numeroOSReforma || null,
+      numero_os_conserto: numeroOSConserto || null,
+    });
+
+    inputServico.value = "";
+    if (typeof fakeServico !== "undefined") fakeServico.innerText = "Selec.";
+    inputQuantidade.value = "1";
+    if (typeof fakeQuantidade !== "undefined") fakeQuantidade.innerText = "1";
+    valor.value = "";
+    corReforma = "";
+    numeroOSReforma = "";
+    numeroOSConserto = "";
+
+    renderizarItensOS();
+    atualizarProgresso();
+  }
+
+  if (itensOS.length > 0) {
+    const resumoNomes = itensOS.map((i) => i.servico).join(", ");
+    observacao.value = `SERVIÇOS: ${resumoNomes}`.toUpperCase();
+    validarObservacao();
+  }
+}
+
 // Renderização de fotos
 function renderFotos() {
   photoGrid.innerHTML = "";
@@ -376,9 +528,11 @@ function renderFotos() {
       adicionar.innerHTML = `<i class="fa-solid fa-camera"></i><span>Adicionar</span>`;
 
       adicionar.addEventListener("click", async () => {
+        // AO CLICAR PARA ADICIONAR FOTO, SALVA SERVIÇO PENDENTE E PREENCHE A OBSERVAÇÃO
+        verificarEPreencherObservacao();
+
         if (window.Capacitor && window.Capacitor.isNativePlatform()) {
           try {
-            // 'Camera' bareword não resolve em módulo ES — usar window.Camera
             const image = await window.Camera.getPhoto({
               quality: 70,
               allowEditing: false,
@@ -510,29 +664,15 @@ function validarTelefone() {
 }
 
 function validarServico() {
-  let ok = inputServico.value !== "";
-  if (ok) {
-    if (inputServico.value === "REFORMA") {
-      ok = corReforma !== "" && numeroOSReforma !== "";
-    } else if (inputServico.value === "CONSERTO/SOLDA") {
-      ok = numeroOSConserto !== "";
-    }
-  }
-  fakeServico.classList.toggle("is-invalid", !ok);
-  fakeServico.classList.toggle("is-valid", ok);
+  const ok = itensOS.length > 0;
+  containerItens.classList.toggle("border-red-500", !ok);
   return ok;
 }
 function validarQuantidade() {
-  const ok = inputQuantidade.value !== "";
-  fakeQuantidade.classList.toggle("is-invalid", !ok);
-  fakeQuantidade.classList.toggle("is-valid", ok);
-  return ok;
+  return true; // Não barra se o input inferior estiver limpo e a lista já possuir itens
 }
 function validarValor() {
-  const temValor = valor.value.replace(/\D/g, "").length > 0;
-  valor.classList.toggle("is-invalid", !temValor && valor.value.length > 0);
-  valor.classList.toggle("is-valid", temValor);
-  return temValor;
+  return true; // Não barra se o input inferior estiver limpo e a lista já possuir itens
 }
 function validarObservacao() {
   const valido = observacao.value.trim().length >= 3;
@@ -551,11 +691,7 @@ function validarFotos() {
 
 function atualizarProgresso() {
   const c1 = validarNome() && validarTelefone();
-  const c2 =
-    validarServico() &&
-    validarQuantidade() &&
-    validarValor() &&
-    validarObservacao();
+  const c2 = validarServico() && validarObservacao();
   const c3 = validarFotos();
   document.getElementById("step1").classList.toggle("done", c1);
   document.getElementById("step2").classList.toggle("done", c2);
@@ -576,29 +712,28 @@ observacao.addEventListener("input", () => {
   atualizarProgresso();
 });
 
+// Evento de foco na observação para capturar serviço pendente
+observacao.addEventListener("focus", () => {
+  verificarEPreencherObservacao();
+});
+
 form.addEventListener("submit", async (event) => {
   event.preventDefault();
   if (isSaving) return;
 
+  // Garante captura se ficou algum serviço pendente nos inputs antes de enviar
+  verificarEPreencherObservacao();
+
   const okNome = validarNome();
   const okTelefone = validarTelefone();
   const okServico = validarServico();
-  const okQuantidade = validarQuantidade();
-  const okValor = validarValor();
   const okObservacao = validarObservacao();
   const okFotos = validarFotos();
   atualizarProgresso();
 
-  if (
-    !okNome ||
-    !okTelefone ||
-    !okServico ||
-    !okQuantidade ||
-    !okValor ||
-    !okObservacao ||
-    !okFotos
-  ) {
+  if (!okNome || !okTelefone || !okServico || !okObservacao || !okFotos) {
     let msgErro = "Preencha todos os campos obrigatórios (*).";
+    if (!okServico) msgErro = "Adicione pelo menos 1 serviço à OS.";
     if (!okObservacao) msgErro = "Por favor, preencha a descrição do serviço.";
     if (!okFotos) msgErro = "Por favor, adicione pelo menos 1 foto.";
     mostrarToast(msgErro, "erro");
@@ -610,10 +745,6 @@ form.addEventListener("submit", async (event) => {
   submitButton.innerHTML =
     '<i class="fa-solid fa-spinner fa-spin"></i> PROCESSANDO...';
 
-  const valorNumerico = parseFloat(
-    valor.value.replace(/[^\d,]/g, "").replace(",", "."),
-  );
-
   const telValor = telefone.value.trim();
   const telefoneCompleto = telValor
     ? `${paisDDI.value} ${telValor}`
@@ -622,19 +753,27 @@ form.addEventListener("submit", async (event) => {
   let nomeFinal =
     nome.value.trim() === "" ? "CONSUMIDOR" : nome.value.trim().toUpperCase();
 
+  const servicosResumo = itensOS
+    .map((i) => i.servico)
+    .join(", ")
+    .toUpperCase();
+
+  const valorTotalGeral = itensOS.reduce((soma, i) => soma + i.valor, 0);
+  const qtdTotalGeral = itensOS.reduce((soma, i) => soma + i.quantidade, 0);
+
   const cadastro = {
     nome: nomeFinal,
     telefone: telefoneCompleto,
-    servico: inputServico.value.toUpperCase(),
-    quantidade: parseInt(inputQuantidade.value),
-    valor: valorNumerico,
+    servico: servicosResumo,
+    quantidade: qtdTotalGeral,
+    valor: valorTotalGeral,
+    itens_servicos: itensOS,
     observacao: observacao.value.trim().toUpperCase(),
     aparelho: nomeAparelho || "Aparelho Desconhecido",
-    cor: inputServico.value === "REFORMA" ? corReforma || null : null,
-    numero_os:
-      inputServico.value === "REFORMA" ? numeroOSReforma || null : null,
+    cor: itensOS.find((i) => i.cor)?.cor || null,
+    numero_os: itensOS.find((i) => i.numero_os)?.numero_os || null,
     numero_os_conserto:
-      inputServico.value === "CONSERTO/SOLDA" ? numeroOSConserto || null : null,
+      itensOS.find((i) => i.numero_os_conserto)?.numero_os_conserto || null,
   };
 
   const arquivosFotos = fotos.map((f) => f.arquivo);
@@ -670,6 +809,8 @@ form.addEventListener("submit", async (event) => {
     }
 
     form.reset();
+    itensOS = [];
+    renderizarItensOS();
     paisDDI.value = "+55";
     btnDDI.innerHTML = "🇧🇷 +55";
     telefone.placeholder = "(00) 00000-0000";
