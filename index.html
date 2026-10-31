@@ -371,25 +371,28 @@
               <h2 class="text-sm font-bold text-slate-800">Dados do serviço</h2>
               <span class="field-hint" id="hintServico">2 de 3</span>
             </div>
+
+            <!-- LISTA DE ITENS JÁ ADICIONADOS -->
+            <div
+              id="containerItensAdicionados"
+              class="flex flex-col gap-2 mb-3"
+            ></div>
+
+            <!-- FORMULÁRIO PARA SELECIONAR O ITEM ATUAL -->
             <div class="grid grid-cols-3 gap-2">
               <div>
                 <label for="servico" class="field-label"
                   >Serviço <span class="req">*</span></label
                 >
-                <input type="hidden" id="servico" name="servico" required />
-                <input
-                  type="hidden"
-                  id="quantidade"
-                  name="quantidade"
-                  required
-                />
+                <input type="hidden" id="servico" name="servico" />
+                <input type="hidden" id="quantidade" name="quantidade" />
                 <div id="fakeServico" class="fake-select">Selec.</div>
               </div>
               <div>
                 <label for="quantidadeFake" class="field-label"
                   >Qtd <span class="req">*</span></label
                 >
-                <div id="fakeQuantidadeVisivel" class="fake-select">0</div>
+                <div id="fakeQuantidadeVisivel" class="fake-select">1</div>
               </div>
               <div>
                 <label for="valor" class="field-label"
@@ -401,10 +404,19 @@
                   class="field"
                   type="tel"
                   placeholder="R$ 0,00"
-                  required
                 />
               </div>
             </div>
+
+            <!-- BOTÃO DE ADICIONAR À LISTA -->
+            <button
+              type="button"
+              id="btnAdicionarItem"
+              class="mt-3 w-full h-10 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 text-xs font-bold rounded-lg border border-indigo-200 transition-colors flex items-center justify-center gap-2"
+            >
+              <i class="fa-solid fa-plus"></i> ADICIONAR ESTE SERVIÇO À OS
+            </button>
+
             <div class="mt-3">
               <label for="observacao" class="field-label"
                 >Descrição do serviço <span class="req">*</span></label
