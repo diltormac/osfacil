@@ -1,0 +1,17 @@
+Caminho da pasta: C:\Users\Dilson\Documentos\Clinica da roda\app_refatorado 
+Listagem de caminhos de pasta para o volume Acer
+O número de série do volume é 22FF-8A69
+C:.
+|   gerar_lista.bat
+|   index.html
+|   lista_arquivos.txt
+|   
++---css
+|       styles.css
+|       
+\---js
+        app.js
+        camera.js
+        database.js
+        supabase.js
+        
