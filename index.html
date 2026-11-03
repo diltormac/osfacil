@@ -289,10 +289,11 @@
             <button
               type="button"
               id="btnAbrirPesquisa"
+              onclick="window.location.href = './os_painel/index.html'"
               class="flex items-center gap-1.5 bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-semibold py-1.5 px-3 rounded-lg shadow transition-colors"
             >
-              <i class="fa-solid fa-magnifying-glass text-[10px]"></i>
-              <span class="hidden sm:inline">Pesquisar</span>
+              <i class="fa-solid fa-table-list text-[10px]"></i>
+              <span class="hidden sm:inline">Painel OS</span>
             </button>
           </div>
         </div>
@@ -381,18 +382,29 @@
             <!-- FORMULÁRIO PARA SELECIONAR O ITEM ATUAL -->
             <div class="grid grid-cols-3 gap-2">
               <div>
-                <label for="servico" class="field-label"
+                <label for="selectServico" class="field-label"
                   >Serviço <span class="req">*</span></label
                 >
                 <input type="hidden" id="servico" name="servico" />
                 <input type="hidden" id="quantidade" name="quantidade" />
-                <div id="fakeServico" class="fake-select">Selec.</div>
+                <select
+                  id="selectServico"
+                  class="w-full h-11 px-3 bg-slate-800 text-white text-sm rounded-lg border border-slate-700 outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/30 transition-colors"
+                >
+                  <option value="">Selecione...</option>
+                </select>
               </div>
               <div>
-                <label for="quantidadeFake" class="field-label"
+                <label for="inputQtd" class="field-label"
                   >Qtd <span class="req">*</span></label
                 >
-                <div id="fakeQuantidadeVisivel" class="fake-select">1</div>
+                <input
+                  id="inputQtd"
+                  type="number"
+                  min="1"
+                  value="1"
+                  class="w-full h-11 px-3 bg-slate-800 text-white text-sm rounded-lg border border-slate-700 outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/30 transition-colors"
+                />
               </div>
               <div>
                 <label for="valor" class="field-label"
@@ -401,7 +413,7 @@
                 <input
                   id="valor"
                   name="valor"
-                  class="field"
+                  class="w-full h-11 px-3 bg-slate-800 text-white text-sm rounded-lg border border-slate-700 outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/30 transition-colors"
                   type="tel"
                   placeholder="R$ 0,00"
                 />
