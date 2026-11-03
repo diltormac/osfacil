@@ -15,8 +15,8 @@ const nome = document.getElementById("nome");
 
 const inputServico = document.getElementById("servico");
 const inputQuantidade = document.getElementById("quantidade");
-const fakeServico = document.getElementById("fakeServico");
-const fakeQuantidade = document.getElementById("fakeQuantidadeVisivel");
+const selectServico = document.getElementById("selectServico");
+const inputQtd = document.getElementById("inputQtd");
 
 const valor = document.getElementById("valor");
 const observacao = document.getElementById("observacao");
@@ -32,6 +32,120 @@ let corReforma = "";
 let numeroOSReforma = "";
 let numeroOSConserto = "";
 
+// Catálogo de serviços (carregado dinamicamente do Supabase com fallback offline)
+// Cada item: { nome: string, valor: number }
+let opcoesServico = [];
+
+const CATALOGO_SERVICOS_KEY = "@osfacil_catalogo_servicos";
+const CATALOGO_SERVICOS_FALLBACK = [
+  { nome: "Alinhamento", valor: 50 },
+  { nome: "Balanceamento", valor: 50 },
+  { nome: "Conserto", valor: 150 },
+  { nome: "Solda", valor: 150 },
+  { nome: "Escapamento", valor: 200 },
+  { nome: "Mecanica", valor: 200 },
+  { nome: "Reforma", valor: 200 },
+];
+
+function normalizarItemCatalogo(item) {
+  if (!item) return null;
+  if (typeof item === "string") {
+    const nome = item.trim();
+    return nome ? { nome, valor: 0 } : null;
+  }
+  const nome = (item.nome || item.servico || item.descricao || "")
+    .toString()
+    .trim();
+  if (!nome) return null;
+  const valorRaw = item.valor ?? item.preco ?? item.valor_padrao ?? 0;
+  const valor = Number(valorRaw) || 0;
+  return { nome, valor };
+}
+
+function popularSelectServico() {
+  if (!selectServico) return;
+  const valorAtual = selectServico.value;
+  selectServico.innerHTML = '<option value="">Selecione...</option>';
+  opcoesServico.forEach((item) => {
+    const opt = document.createElement("option");
+    opt.value = item.nome;
+    opt.textContent = item.nome;
+    selectServico.appendChild(opt);
+  });
+  if (valorAtual) selectServico.value = valorAtual;
+}
+
+async function carregarServicosFormulario() {
+  try {
+    if (navigator.onLine) {
+      const { data, error } = await supabaseClient
+        .from("catalogo_servicos")
+        .select("*");
+
+      if (error) throw error;
+
+      if (data && data.length > 0) {
+        opcoesServico = data
+          .map(normalizarItemCatalogo)
+          .filter((i) => i !== null);
+
+        localStorage.setItem(
+          CATALOGO_SERVICOS_KEY,
+          JSON.stringify(opcoesServico),
+        );
+        popularSelectServico();
+        return;
+      }
+    }
+  } catch (err) {
+    console.warn("Falha ao carregar catálogo do Supabase, usando cache.", err);
+  }
+
+  // Fallback: localStorage
+  try {
+    const cache = localStorage.getItem(CATALOGO_SERVICOS_KEY);
+    if (cache) {
+      const parsed = JSON.parse(cache);
+      if (Array.isArray(parsed) && parsed.length > 0) {
+        opcoesServico = parsed
+          .map(normalizarItemCatalogo)
+          .filter((i) => i !== null);
+        popularSelectServico();
+        return;
+      }
+    }
+  } catch (e) {
+    console.warn("Cache de catálogo inválido.", e);
+  }
+
+  // Fallback final: array padrão
+  opcoesServico = [...CATALOGO_SERVICOS_FALLBACK];
+  popularSelectServico();
+}
+
+function formatarValorInput(valorNumerico) {
+  let v = (Number(valorNumerico) || 0).toFixed(2) + "";
+  v = v.replace(".", ",");
+  v = v.replace(/(\d)(\d{3})(\d{3}),/g, "$1.$2.$3,");
+  v = v.replace(/(\d)(\d{3}),/g, "$1.$2,");
+  return "R$ " + v;
+}
+
+if (selectServico) {
+  selectServico.addEventListener("change", () => {
+    const nome = selectServico.value;
+    inputServico.value = nome;
+    const item = opcoesServico.find((i) => i.nome === nome);
+    if (item && item.valor > 0) {
+      valor.value = formatarValorInput(item.valor);
+      validarValor();
+    } else if (!nome) {
+      valor.value = "";
+    }
+    atualizarProgresso();
+  });
+}
+
 // Array para armazenar os múltiplos serviços da OS
 let itensOS = [];
 
@@ -40,10 +154,13 @@ const btnAdicionarItem = document.getElementById("btnAdicionarItem");
 const containerItens = document.getElementById("containerItensAdicionados");
 
 btnAdicionarItem.onclick = () => {
-  const serv = inputServico.value;
-  if (!serv) return; // Se estiver vazio, apenas sai sem dar erro estrito
+  const serv = selectServico ? selectServico.value : inputServico.value;
+  if (!serv) {
+    mostrarToast("Selecione um serviço antes de adicionar.", "erro");
+    return;
+  }
 
-  const qtd = parseInt(inputQuantidade.value) || 1;
+  const qtd = parseInt(inputQtd ? inputQtd.value : inputQuantidade.value) || 1;
   const valTexto = valor.value.replace(/[^\d]/g, "");
   const valNum = valTexto ? parseFloat(valTexto) / 100 : 0;
 
@@ -57,9 +174,9 @@ btnAdicionarItem.onclick = () => {
   });
 
   inputServico.value = "";
-  fakeServico.innerText = "Selec.";
+  if (selectServico) selectServico.value = "";
   inputQuantidade.value = "1";
-  fakeQuantidade.innerText = "1";
+  if (inputQtd) inputQtd.value = "1";
   valor.value = "";
   corReforma = "";
   numeroOSReforma = "";
@@ -345,102 +462,31 @@ btnDDI.onclick = () => {
   aplicarMascaraTelefone();
 };
 
-// Modais de Opções
-const opcoesServico = [
-  "Alinhamento",
-  "Balanceamento",
-  "Conserto",
-  "Solda",
-  "Escapamento",
-  "Mecanica",
-  "Reforma",
-];
-const opcoesQuantidade = ["1", "2", "3", "4", "5", "6"];
-let campoAtivoModal = "";
-
-fakeServico.onclick = () => abrirModalOpcoes("servico");
-fakeQuantidade.onclick = () => abrirModalOpcoes("quantidade");
-
-function abrirModalOpcoes(campo) {
-  campoAtivoModal = campo;
-  const modal = document.getElementById("customModal");
-  const titulo = document.getElementById("modalTitle");
-  const lista = document.getElementById("modalList");
-
-  const opcoes = campo === "servico" ? opcoesServico : opcoesQuantidade;
-  const valorAtual =
-    campo === "servico" ? inputServico.value : inputQuantidade.value;
-
-  titulo.innerText =
-    campo === "servico" ? "Selecione o Serviço" : "Selecione a Quantidade";
-  lista.innerHTML = "";
-
-  opcoes.forEach((opt) => {
-    const div = document.createElement("div");
-    div.className = `modal-item ${valorAtual === opt ? "selected" : ""}`;
-    div.innerHTML = `<span>${opt}</span> ${valorAtual === opt ? '<i class="fa-solid fa-check"></i>' : ""}`;
-    div.onclick = () => selecionarOpcao(opt);
-    lista.appendChild(div);
-  });
-
-  modal.classList.add("show");
-}
-
-document.getElementById("btnFecharModalOpcoes").onclick = () => {
-  document.getElementById("customModal").classList.remove("show");
-};
-
-function selecionarOpcao(valorSelecionado) {
-  if (campoAtivoModal === "servico") {
-    inputServico.value = valorSelecionado;
-    fakeServico.innerText = valorSelecionado;
-
-    const servUpper = valorSelecionado.toUpperCase();
-
+// Ao selecionar serviços que exigem detalhes (REFORMA/CONSERTO/SOLDA),
+// abre o modal de detalhes automaticamente.
+if (selectServico) {
+  selectServico.addEventListener("change", () => {
+    const servUpper = (selectServico.value || "").toUpperCase();
     if (servUpper !== "REFORMA") {
       corReforma = "";
       numeroOSReforma = "";
     }
-    if (servUpper !== "CONSERTO" && servUpper !== "SOLDA") {
+    if (
+      servUpper !== "CONSERTO" &&
+      servUpper !== "SOLDA" &&
+      servUpper !== "CONSERTO/SOLDA"
+    ) {
       numeroOSConserto = "";
     }
-
-    validarServico();
-
-    const tabelaPrecos = {
-      Alinhamento: 50,
-      Balanceamento: 50,
-      Conserto: 150,
-      Solda: 150,
-      Escapamento: 200,
-      Mecanica: 200,
-      Reforma: 200,
-    };
-    if (tabelaPrecos[valorSelecionado]) {
-      inputQuantidade.value = "1";
-      fakeQuantidade.innerText = "1";
-      valor.value = (tabelaPrecos[valorSelecionado] * 100).toString();
-      valor.dispatchEvent(new Event("input"));
-      validarQuantidade();
-    }
-
     if (
       servUpper === "REFORMA" ||
       servUpper === "CONSERTO" ||
-      servUpper === "SOLDA"
+      servUpper === "SOLDA" ||
+      servUpper === "CONSERTO/SOLDA"
     ) {
-      document.getElementById("customModal").classList.remove("show");
       abrirModalDetalhesServico();
-      atualizarProgresso();
-      return;
     }
-  } else {
-    inputQuantidade.value = valorSelecionado;
-    fakeQuantidade.innerText = valorSelecionado;
-    validarQuantidade();
-  }
-  document.getElementById("customModal").classList.remove("show");
-  atualizarProgresso();
+  });
 }
 
 function mostrarToast(mensagem, tipo = "sucesso") {
@@ -463,8 +509,8 @@ function mostrarToast(mensagem, tipo = "sucesso") {
 
 // Função auxiliar para garantir o preenchimento automático da observação ao interagir
 function verificarEPreencherObservacao() {
-  const serv = inputServico.value;
-  const qtd = parseInt(inputQuantidade.value) || 1;
+  const serv = selectServico ? selectServico.value : inputServico.value;
+  const qtd = parseInt(inputQtd ? inputQtd.value : inputQuantidade.value) || 1;
   const valTexto = valor.value.replace(/[^\d]/g, "");
   const valNum = valTexto ? parseFloat(valTexto) / 100 : 0;
 
@@ -479,9 +525,9 @@ function verificarEPreencherObservacao() {
     });
 
     inputServico.value = "";
-    if (typeof fakeServico !== "undefined") fakeServico.innerText = "Selec.";
+    if (selectServico) selectServico.value = "";
     inputQuantidade.value = "1";
-    if (typeof fakeQuantidade !== "undefined") fakeQuantidade.innerText = "1";
+    if (inputQtd) inputQtd.value = "1";
     valor.value = "";
     corReforma = "";
     numeroOSReforma = "";
@@ -816,9 +862,9 @@ form.addEventListener("submit", async (event) => {
     telefone.placeholder = "(00) 00000-0000";
     valor.value = "";
     inputServico.value = "";
-    fakeServico.innerText = "Selec.";
-    inputQuantidade.value = "";
-    fakeQuantidade.innerText = "0";
+    if (selectServico) selectServico.value = "";
+    inputQuantidade.value = "1";
+    if (inputQtd) inputQtd.value = "1";
     corReforma = "";
     numeroOSReforma = "";
     numeroOSConserto = "";
@@ -842,11 +888,6 @@ form.addEventListener("submit", async (event) => {
 });
 
 // Pesquisa
-document.getElementById("btnAbrirPesquisa").onclick = () => {
-  document.getElementById("modalPesquisa").classList.remove("hidden");
-  document.getElementById("inputBusca").focus();
-  executarBusca();
-};
 document.getElementById("btnFecharPesquisa").onclick = () => {
   document.getElementById("modalPesquisa").classList.add("hidden");
 };
@@ -1027,6 +1068,7 @@ function atualizarCarrossel() {
 }
 
 // Eventos iniciais
+carregarServicosFormulario();
 renderFotos();
 atualizarProgresso();
 setInterval(() => sincronizarPendentes(mostrarToast), 15000);
