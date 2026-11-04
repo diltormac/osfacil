@@ -22,7 +22,6 @@ let indexFotoAtual = 0;
 let isSaving = false;
 let nomeAparelho = localStorage.getItem("@osfacil_aparelho");
 
-// Variáveis para guardar os detalhes temporários do serviço atual
 let corReforma = "";
 let numeroOSReforma = "";
 let numeroOSConserto = "";
@@ -40,6 +39,15 @@ const CATALOGO_SERVICOS_FALLBACK = [
   { nome: "Mecanica", valor: 200 },
   { nome: "Reforma", valor: 200 },
 ];
+
+// Função para gerar um código único e seguro
+function gerarUUID() {
+  return "xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx".replace(/[xy]/g, function (c) {
+    var r = (Math.random() * 16) | 0,
+      v = c == "x" ? r : (r & 0x3) | 0x8;
+    return v.toString(16);
+  });
+}
 
 function normalizarItemCatalogo(item) {
   if (!item) return null;
@@ -106,7 +114,7 @@ function formatarValorInput(valorNumerico) {
 }
 
 /* =========================================================
-   NOVA LÓGICA DO MODAL DE ADICIONAR SERVIÇO
+   MODAL DE ADICIONAR SERVIÇO
    ========================================================= */
 
 const btnAdicionarItem = document.getElementById("btnAdicionarItem");
@@ -120,7 +128,6 @@ const modalInputNumero = document.getElementById("modalInputNumero");
 const modalInputQtd = document.getElementById("modalInputQtd");
 const modalInputValor = document.getElementById("modalInputValor");
 
-// Máscara de valor no modal
 modalInputValor.addEventListener("input", (e) => {
   let v = e.target.value.replace(/\D/g, "");
   v = (v / 100).toFixed(2) + "";
@@ -139,7 +146,6 @@ btnAdicionarItem.onclick = () => {
   modalGrupoCor.classList.add("hidden");
   modalGrupoNumero.classList.add("hidden");
 
-  // Limpa os detalhes pendentes
   corReforma = "";
   numeroOSReforma = "";
   numeroOSConserto = "";
@@ -172,7 +178,6 @@ modalSelectServico.addEventListener("change", async (e) => {
     modalInputValor.value = formatarValorInput(itemCat.valor);
   }
 
-  // Regra da Reforma
   if (servUpper === "REFORMA") {
     modalGrupoCor.classList.remove("hidden");
     modalGrupoNumero.classList.remove("hidden");
@@ -183,9 +188,7 @@ modalSelectServico.addEventListener("change", async (e) => {
     if (!numeroOSReforma) {
       buscarProximoNumero(true, modalInputNumero);
     }
-  }
-  // Regra do Conserto/Solda
-  else if (
+  } else if (
     servUpper === "CONSERTO" ||
     servUpper === "SOLDA" ||
     servUpper === "CONSERTO/SOLDA"
@@ -408,7 +411,6 @@ document.getElementById("triggerAlterarNome").onclick = () => {
 
 verificarIdentificacaoAparelho();
 
-// DDI e Telefonia
 btnDDI.onclick = () => {
   if (paisDDI.value === "+55") {
     paisDDI.value = "+595";
@@ -665,38 +667,36 @@ form.addEventListener("submit", async (event) => {
   const telefoneCompleto = telValor
     ? `${paisDDI.value} ${telValor}`
     : "SEM CONTATO";
-
   let nomeFinal =
     nome.value.trim() === "" ? "CONSUMIDOR" : nome.value.trim().toUpperCase();
 
-  // AQUI: Monta os serviços e o texto para a coluna de observação
   const servicosResumo = itensOS
     .map((i) => i.servico)
     .join(", ")
     .toUpperCase();
   const textoDigitado = observacao.value.trim().toUpperCase();
 
-  // Mescla os serviços com a descrição do usuário
   let observacaoFinal = "";
-  if (servicosResumo && textoDigitado) {
+  if (servicosResumo && textoDigitado)
     observacaoFinal = `SERVIÇOS: ${servicosResumo} - ${textoDigitado}`;
-  } else if (servicosResumo) {
-    observacaoFinal = `SERVIÇOS: ${servicosResumo}`;
-  } else {
-    observacaoFinal = textoDigitado;
-  }
+  else if (servicosResumo) observacaoFinal = `SERVIÇOS: ${servicosResumo}`;
+  else observacaoFinal = textoDigitado;
 
   const valorTotalGeral = itensOS.reduce((soma, i) => soma + i.valor, 0);
   const qtdTotalGeral = itensOS.reduce((soma, i) => soma + i.quantidade, 0);
 
+  // GERA A CHAVE ÚNICA DE SEGURANÇA
+  const uuidLocal = gerarUUID();
+
   const cadastro = {
+    uuid_local: uuidLocal, // Salva no banco para evitar duplicação
     nome: nomeFinal,
     telefone: telefoneCompleto,
-    servico: servicosResumo, // Coluna de serviço pura
+    servico: servicosResumo,
     quantidade: qtdTotalGeral,
     valor: valorTotalGeral,
     itens_servicos: itensOS,
-    observacao: observacaoFinal, // Coluna de observação com o texto mesclado
+    observacao: observacaoFinal,
     aparelho: nomeAparelho || "Aparelho Desconhecido",
     cor: itensOS.find((i) => i.cor)?.cor || null,
     numero_os: itensOS.find((i) => i.numero_os)?.numero_os || null,
@@ -725,6 +725,8 @@ form.addEventListener("submit", async (event) => {
       }
 
       const cadastroFinal = { ...cadastro, fotos_urls: urlsDasFotos };
+
+      // Tenta inserir. Se a internet cair, vai pro Catch e salva offline.
       const { error } = await supabaseClient
         .from("ordens_servico")
         .insert([cadastroFinal]);
@@ -732,6 +734,7 @@ form.addEventListener("submit", async (event) => {
 
       mostrarToast("Pré-cadastro enviado com sucesso!", "sucesso");
     } else {
+      // Salva com o UUID para o sincronizador não duplicar depois
       await salvarOSOffline(cadastro, arquivosFotos);
       mostrarToast("Sem internet. Salvo no celular com segurança!", "sucesso");
     }
@@ -756,9 +759,30 @@ form.addEventListener("submit", async (event) => {
     atualizarProgresso();
   } catch (error) {
     console.error(error);
-    mostrarToast("Erro ao enviar. Tente novamente.", "erro");
+    mostrarToast(
+      "Erro ao enviar (conexão instável). Salvando no celular...",
+      "erro",
+    );
+
+    // Salva offline usando o mesmo UUID gerado
     await salvarOSOffline(cadastro, arquivosFotos);
-    mostrarToast("Salvo no celular! Enviaremos depois.", "erro");
+
+    // Limpa o form mesmo assim, pois a OS já está a salvo no celular
+    form.reset();
+    itensOS = [];
+    renderizarItensOS();
+    paisDDI.value = "+55";
+    btnDDI.innerHTML = "🇧🇷 +55";
+    telefone.placeholder = "(00) 00000-0000";
+    corReforma = "";
+    numeroOSReforma = "";
+    numeroOSConserto = "";
+    modalInputCor.value = "";
+    modalInputNumero.value = "";
+    fotos = [];
+    renderFotos();
+    photoSection.classList.remove("has-error");
+    atualizarProgresso();
   } finally {
     isSaving = false;
     submitButton.disabled = false;

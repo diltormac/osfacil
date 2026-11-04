@@ -23,8 +23,15 @@ export async function salvarOSOffline(cadastro, arquivosFotos) {
   let pendentes = JSON.parse(
     localStorage.getItem("@osfacil_pendentes") || "[]",
   );
-  pendentes.push(novaOS);
-  localStorage.setItem("@osfacil_pendentes", JSON.stringify(pendentes));
+
+  // Se por acaso já existir esse UUID na lista, não adiciona de novo
+  const jaExiste = pendentes.some(
+    (p) => p.dados.uuid_local === cadastro.uuid_local,
+  );
+  if (!jaExiste) {
+    pendentes.push(novaOS);
+    localStorage.setItem("@osfacil_pendentes", JSON.stringify(pendentes));
+  }
 }
 
 export async function sincronizarPendentes(mostrarToastCallback) {
@@ -40,6 +47,23 @@ export async function sincronizarPendentes(mostrarToastCallback) {
       continue;
     }
     try {
+      // A MÁGICA ACONTECE AQUI: Verifica no banco se esse UUID já foi salvo
+      if (os.dados.uuid_local) {
+        const { data: existente } = await supabaseClient
+          .from("ordens_servico")
+          .select("id")
+          .eq("uuid_local", os.dados.uuid_local)
+          .maybeSingle();
+
+        if (existente) {
+          // Se já está no banco (a internet caiu mas o servidor salvou), apenas ignora!
+          console.log(
+            "OS já estava salva no banco. Removendo da fila offline.",
+          );
+          continue;
+        }
+      }
+
       let urlsDasFotos = [];
       for (const foto of os.fotos) {
         const res = await fetch(foto.base64);
@@ -54,6 +78,7 @@ export async function sincronizarPendentes(mostrarToastCallback) {
           .getPublicUrl(nomeArquivo);
         urlsDasFotos.push(urlData.publicUrl);
       }
+
       const cadastroFinal = { ...os.dados, fotos_urls: urlsDasFotos };
       const { error } = await supabaseClient
         .from("ordens_servico")
