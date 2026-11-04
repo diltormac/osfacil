@@ -26,10 +26,7 @@ export function urlSegura(url) {
 /* Normaliza para busca: minúsculas e sem acento ("joão" acha "JOAO"). */
 export function normalizar(valor) {
   if (valor === null || valor === undefined) return "";
-  return String(valor)
-    .normalize("NFD")
-    .replace(/[̀-ͯ]/g, "")
-    .toLowerCase();
+  return String(valor).normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase();
 }
 
 export function iniciais(nome) {
@@ -88,7 +85,9 @@ export function formatarMoeda(valor) {
    Retorna null quando não é um número válido. */
 export function lerValor(texto) {
   if (texto === null || texto === undefined) return null;
-  let t = String(texto).trim().replace(/\s|R\$/g, "");
+  let t = String(texto)
+    .trim()
+    .replace(/\s|R\$/g, "");
   if (!t) return null;
   if (t.includes(",")) t = t.replace(/\./g, "").replace(",", ".");
   const n = Number(t);
@@ -146,6 +145,69 @@ export function copiarCampo(elementId) {
       toast("Campo copiado!");
     })
     .catch(() => {
-      toast("Não foi possível copiar. Selecione o texto e use Ctrl+C.", "error");
+      toast(
+        "Não foi possível copiar. Selecione o texto e use Ctrl+C.",
+        "error",
+      );
     });
+}
+
+/* ---------- MODAL DE CONFIRMAÇÃO CUSTOMIZADO ----------
+   Substitui o window.confirm() nativo por um diálogo bonito integrado ao app. */
+export function confirmarAcao({
+  titulo,
+  mensagem,
+  textoBotao = "Confirmar",
+  icone = "fa-triangle-exclamation",
+  cor = "red",
+}) {
+  return new Promise((resolve) => {
+    const modal = document.createElement("div");
+    modal.className =
+      "camada-modal fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center z-[100] p-4";
+
+    // Define as cores do botão e do ícone de acordo com a ação
+    const corBg = cor === "red" ? "bg-red-50" : "bg-indigo-50";
+    const corText = cor === "red" ? "text-red-500" : "text-indigo-500";
+    const corBtn =
+      cor === "red"
+        ? "bg-red-600 hover:bg-red-700"
+        : "bg-indigo-600 hover:bg-indigo-700";
+
+    modal.innerHTML = `
+      <div class="bg-white rounded-2xl p-6 max-w-sm w-full shadow-2xl flex flex-col items-center text-center">
+        <div class="w-16 h-16 rounded-full ${corBg} ${corText} flex items-center justify-center mb-4">
+          <i class="fa-solid ${icone} text-3xl"></i>
+        </div>
+        
+        <h3 class="font-bold text-slate-800 text-lg mb-2">${titulo}</h3>
+        <p class="text-sm text-slate-500 mb-6">${mensagem}</p>
+        
+        <div class="flex w-full gap-3">
+          <button type="button" id="btnCancelarCustom" class="flex-1 px-4 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-sm font-bold transition">
+            Cancelar
+          </button>
+          <button type="button" id="btnConfirmarCustom" class="flex-1 px-4 py-2.5 ${corBtn} text-white rounded-xl text-sm font-bold transition shadow-sm">
+            ${textoBotao}
+          </button>
+        </div>
+      </div>
+    `;
+
+    document.body.appendChild(modal);
+
+    const fechar = (resultado) => {
+      modal.remove();
+      resolve(resultado);
+    };
+
+    modal.querySelector("#btnCancelarCustom").onclick = () => fechar(false);
+    modal.querySelector("#btnConfirmarCustom").onclick = () => fechar(true);
+
+    // Permite fechar clicando fora ou apertando Esc
+    modal.addEventListener("click", (e) => {
+      if (e.target === modal) fechar(false);
+    });
+    modal.fecharCamada = () => fechar(false);
+  });
 }

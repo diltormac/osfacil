@@ -33,6 +33,7 @@ import {
   sinalTempoLimite,
   ehConsertoOuSolda,
   normalizar,
+  confirmarAcao,
 } from "./utils.js";
 
 let carregando = false;
@@ -71,7 +72,6 @@ function montarConsultaOS({
     const q = normalizar(termo);
     const qDigitos = q.replace(/\D/g, "");
     const partes = [];
-    // Busca textual normalizada (usa coluna gerada busca_normalizada).
     partes.push(`busca_normalizada.ilike.%${q.replace(/[%,]/g, "")}%`);
     if (qDigitos.length >= 4) {
       partes.push(`telefone.ilike.%${qDigitos}%`);
@@ -146,7 +146,6 @@ export async function carregarDados() {
     atualizarTudo();
   }
 
-  // Dashboard e galeria são independentes: falhas aqui não bloqueiam a lista.
   carregarResumoDashboard();
   carregarUltimasOS();
   carregarGaleria();
@@ -208,7 +207,6 @@ export async function carregarMaisOS() {
   }
 }
 
-/* Resumo agregado do dashboard (RPC resumo_os). */
 export async function carregarResumoDashboard() {
   if (!supabaseClient) return;
   setDashboardCarregamento("carregando");
@@ -232,7 +230,6 @@ export async function carregarResumoDashboard() {
   }
 }
 
-/* Últimas 10 OS para o dashboard. */
 export async function carregarUltimasOS() {
   if (!supabaseClient) return;
   try {
@@ -254,7 +251,6 @@ export async function carregarUltimasOS() {
   }
 }
 
-/* Primeira página da galeria. */
 export async function carregarGaleria() {
   if (!supabaseClient) return;
   setGaleriaCarregamento("carregando");
@@ -291,7 +287,6 @@ export async function carregarGaleria() {
   }
 }
 
-/* Próxima página da galeria. */
 export async function carregarMaisGaleria() {
   if (!supabaseClient) return;
   setCarregandoMaisGaleria(true);
@@ -329,11 +324,10 @@ export async function carregarMaisGaleria() {
   }
 }
 
-/* Trava um botão durante uma operação e devolve uma função que o destrava. */
 function travarBotao(id, textoOcupado) {
   const btn = document.getElementById(id);
   if (!btn) return () => {};
-  if (btn.disabled) return null; // já está em andamento
+  if (btn.disabled) return null;
   const original = btn.innerHTML;
   btn.disabled = true;
   btn.setAttribute("aria-busy", "true");
@@ -377,12 +371,9 @@ export async function salvarEdicoes(id) {
 
   const nome = document.getElementById("editNome").value.trim().toUpperCase();
   const telefone = document.getElementById("editTelefone").value.trim();
-
-  // Pega a cor do campo principal
   const cor = (document.getElementById("editCor")?.value || "")
     .trim()
     .toUpperCase();
-
   const novoValor = lerValor(document.getElementById("editValor").value);
   const novaObs = document
     .getElementById("editObservacao")
@@ -407,8 +398,6 @@ export async function salvarEdicoes(id) {
       "O valor total não pode ser negativo.",
     );
 
-  // AQUI ESTÁ A CORREÇÃO: Aplica a cor APENAS se o serviço for REFORMA.
-  // Para os outros serviços, limpa a cor (deixa vazio).
   const itensAtualizados = itensRascunho.map((item) => {
     const nomeItem = String(item.servico || "").toUpperCase();
     if (nomeItem.includes("REFORMA")) {
@@ -422,7 +411,7 @@ export async function salvarEdicoes(id) {
     status: document.getElementById("editStatus").value,
     nome,
     telefone,
-    cor, // Salva a cor no objeto principal da OS (útil para o Dashboard)
+    cor,
     valor: novoValor,
     observacao: novaObs,
     itens_servicos: itensAtualizados,
@@ -449,21 +438,16 @@ export async function salvarEdicoes(id) {
     const { error } = await (sinal ? consulta.abortSignal(sinal) : consulta);
     if (error) throw error;
 
-    // Só agora o que estava no rascunho passa a valer na lista local.
     Object.assign(osAtual, dadosAtualizacao);
-
-    // Atualiza também o estado do rascunho local
     setItensRascunho(itensAtualizados);
 
     toast("OS atualizada com sucesso!");
     const { fecharModal } = await import("./ui.js");
     fecharModal({ forcar: true });
-    // Atualiza apenas o necessário: resumo do dashboard e últimas OS.
     carregarResumoDashboard();
     carregarUltimasOS();
   } catch (error) {
     console.error(error);
-    // Os dados digitados continuam no formulário para tentar de novo.
     toast(mensagemErro(error, "salvar as alterações"), "error");
     destravar();
     if (btnExcluir) btnExcluir.disabled = false;
@@ -481,7 +465,16 @@ export async function excluirOS(id) {
     qtdFotos > 0
       ? `Excluir a OS de ${os.nome || "cliente sem nome"}? As ${qtdFotos} foto(s) também serão apagadas. Esta ação não pode ser desfeita.`
       : `Excluir a OS de ${os.nome || "cliente sem nome"}? Esta ação não pode ser desfeita.`;
-  if (!confirm(aviso)) return;
+
+  const continuar = await confirmarAcao({
+    titulo: "Excluir Ordem de Serviço",
+    mensagem: aviso,
+    textoBotao: "Sim, Excluir",
+    icone: "fa-trash-can",
+    cor: "red",
+  });
+
+  if (!continuar) return;
 
   const destravar = travarBotao("btnExcluirOS", "Excluindo…");
   if (!destravar) return;
@@ -490,7 +483,6 @@ export async function excluirOS(id) {
 
   try {
     if (!supabaseClient) throw new Error("Failed to fetch");
-    // 1º apaga o registro. Se falhar, nada foi perdido (fotos continuam).
     const consulta = supabaseClient
       .from("ordens_servico")
       .delete()
@@ -499,7 +491,6 @@ export async function excluirOS(id) {
     const { error } = await (sinal ? consulta.abortSignal(sinal) : consulta);
     if (error) throw error;
 
-    // 2º apaga as fotos. Se falhar aqui, a OS já foi excluída; só avisamos.
     let fotosFalharam = false;
     if (qtdFotos > 0) {
       try {
@@ -525,7 +516,6 @@ export async function excluirOS(id) {
     );
     const { fecharModal } = await import("./ui.js");
     fecharModal({ forcar: true });
-    // Atualiza apenas o necessário.
     carregarResumoDashboard();
     carregarUltimasOS();
     carregarGaleria();
@@ -535,4 +525,33 @@ export async function excluirOS(id) {
     destravar();
     if (btnSalvar) btnSalvar.disabled = false;
   }
+}
+
+/* =========================================================
+   REALTIME: ATUALIZAÇÃO AUTOMÁTICA EM TEMPO REAL
+   ========================================================= */
+if (supabaseClient) {
+  supabaseClient
+    .channel("public:ordens_servico")
+    .on(
+      "postgres_changes",
+      { event: "*", schema: "public", table: "ordens_servico" },
+      (payload) => {
+        // Ignora se a mudança foi feita por este mesmo aparelho para não piscar a tela à toa
+        // Mas como não temos o controle exato do client_id aqui, recarregamos de forma silenciosa.
+        console.log(
+          "Realtime: Mudança detectada na tabela ordens_servico.",
+          payload,
+        );
+
+        // Se o modal de edição estiver aberto, não atualiza para não fechar na cara do usuário.
+        const modalAberto = document
+          .getElementById("modalDetalhes")
+          ?.classList.contains("show");
+        if (!modalAberto) {
+          carregarDados();
+        }
+      },
+    )
+    .subscribe();
 }
