@@ -155,6 +155,7 @@ function lerFormulario() {
     "editStatus",
     "editNome",
     "editTelefone",
+    "editCor",
     "editValor",
     "editObservacao",
   ];
@@ -255,6 +256,11 @@ export function abrirDetalhes(id) {
           </button>
         </div>
       </div>
+    </div>
+
+    <div>
+      <label for="editCor" class="text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1 block">Cor</label>
+      <input type="text" id="editCor" maxlength="50" value="${esc(os.cor || "")}" class="edit-input" />
     </div>
 
     <div>
