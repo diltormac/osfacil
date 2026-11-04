@@ -5,6 +5,7 @@ import {
   adicionarListaOS,
   estado,
   itensRascunho,
+  setItensRascunho,
   TAMANHO_PAGINA_OS,
   paginaOS,
   setPaginaOS,
@@ -43,6 +44,7 @@ function normalizarOS(item) {
     nome: item.nome || "",
     telefone: item.telefone || "",
     servico: item.servico || "",
+    cor: item.cor || "",
     fotos_urls: Array.isArray(item.fotos_urls)
       ? item.fotos_urls.filter(Boolean)
       : [],
@@ -53,7 +55,11 @@ function normalizarOS(item) {
 }
 
 /* Monta a consulta de OS aplicando filtros de status, busca e datas. */
-function montarConsultaOS({ comRange = true, limite = TAMANHO_PAGINA_OS, offset = 0 } = {}) {
+function montarConsultaOS({
+  comRange = true,
+  limite = TAMANHO_PAGINA_OS,
+  offset = 0,
+} = {}) {
   let consulta = supabaseClient.from("ordens_servico").select("*");
 
   if (estado.filtroStatus && estado.filtroStatus !== "all") {
@@ -155,7 +161,9 @@ export async function recarregarListaOS() {
   try {
     if (!supabaseClient) throw new Error("Failed to fetch");
     setPaginaOS(0);
-    const { data, error } = await executarConsulta(montarConsultaOS({ offset: 0 }));
+    const { data, error } = await executarConsulta(
+      montarConsultaOS({ offset: 0 }),
+    );
     if (error) throw error;
     setListaOS((data || []).map(normalizarOS));
     setTemMaisOS((data || []).length === TAMANHO_PAGINA_OS);
@@ -254,7 +262,9 @@ export async function carregarGaleria() {
     const { data, error } = await executarConsulta(
       supabaseClient
         .from("ordens_servico")
-        .select("id, nome, numero_os, numero_os_conserto, servico, fotos_urls, created_at")
+        .select(
+          "id, nome, numero_os, numero_os_conserto, servico, fotos_urls, created_at",
+        )
         .not("fotos_urls", "is", null)
         .order("created_at", { ascending: false })
         .range(0, TAMANHO_PAGINA_GALERIA - 1),
@@ -293,7 +303,9 @@ export async function carregarMaisGaleria() {
     const { data, error } = await executarConsulta(
       supabaseClient
         .from("ordens_servico")
-        .select("id, nome, numero_os, numero_os_conserto, servico, fotos_urls, created_at")
+        .select(
+          "id, nome, numero_os, numero_os_conserto, servico, fotos_urls, created_at",
+        )
         .not("fotos_urls", "is", null)
         .order("created_at", { ascending: false })
         .range(offset, offset + TAMANHO_PAGINA_GALERIA - 1),
@@ -365,30 +377,55 @@ export async function salvarEdicoes(id) {
 
   const nome = document.getElementById("editNome").value.trim().toUpperCase();
   const telefone = document.getElementById("editTelefone").value.trim();
+
+  // Pega a cor do campo principal
+  const cor = (document.getElementById("editCor")?.value || "")
+    .trim()
+    .toUpperCase();
+
   const novoValor = lerValor(document.getElementById("editValor").value);
   const novaObs = document
     .getElementById("editObservacao")
     .value.trim()
     .toUpperCase();
 
-  if (!nome) return marcarCampoInvalido("editNome", "Informe o nome do cliente.");
+  if (!nome)
+    return marcarCampoInvalido("editNome", "Informe o nome do cliente.");
   if (!telefone)
-    return marcarCampoInvalido("editTelefone", "Informe o telefone do cliente.");
+    return marcarCampoInvalido(
+      "editTelefone",
+      "Informe o telefone do cliente.",
+    );
   if (novoValor === null)
     return marcarCampoInvalido(
       "editValor",
       "Valor total inválido. Use apenas números, ex: 150,00 (ou 0 se não houver cobrança).",
     );
   if (novoValor < 0)
-    return marcarCampoInvalido("editValor", "O valor total não pode ser negativo.");
+    return marcarCampoInvalido(
+      "editValor",
+      "O valor total não pode ser negativo.",
+    );
+
+  // AQUI ESTÁ A CORREÇÃO: Aplica a cor APENAS se o serviço for REFORMA.
+  // Para os outros serviços, limpa a cor (deixa vazio).
+  const itensAtualizados = itensRascunho.map((item) => {
+    const nomeItem = String(item.servico || "").toUpperCase();
+    if (nomeItem.includes("REFORMA")) {
+      return { ...item, cor: cor };
+    } else {
+      return { ...item, cor: "" };
+    }
+  });
 
   const dadosAtualizacao = {
     status: document.getElementById("editStatus").value,
     nome,
     telefone,
+    cor, // Salva a cor no objeto principal da OS (útil para o Dashboard)
     valor: novoValor,
     observacao: novaObs,
-    itens_servicos: itensRascunho.map((i) => ({ ...i })),
+    itens_servicos: itensAtualizados,
   };
 
   if (ehConsertoOuSolda(osAtual)) {
@@ -414,6 +451,10 @@ export async function salvarEdicoes(id) {
 
     // Só agora o que estava no rascunho passa a valer na lista local.
     Object.assign(osAtual, dadosAtualizacao);
+
+    // Atualiza também o estado do rascunho local
+    setItensRascunho(itensAtualizados);
+
     toast("OS atualizada com sucesso!");
     const { fecharModal } = await import("./ui.js");
     fecharModal({ forcar: true });
