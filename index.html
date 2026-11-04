@@ -69,8 +69,127 @@
       </div>
     </div>
 
-    <!-- MODAL DE DETALHES DO SERVIÇO -->
-    <div id="modalDetalhesServico" class="modal-custom" style="z-index: 1500">
+    <!-- NOVO MODAL DE ADICIONAR SERVIÇO -->
+    <div id="modalAdicionarServico" class="modal-custom" style="z-index: 1600">
+      <div class="modal-box" onclick="event.stopPropagation()">
+        <div class="modal-header">
+          <span
+            ><i class="fa-solid fa-wrench text-indigo-600 mr-1"></i> Adicionar
+            Serviço</span
+          >
+          <button
+            id="btnFecharModalAdicionar"
+            style="
+              background: none;
+              border: none;
+              font-size: 20px;
+              color: #94a3b8;
+            "
+          >
+            <i class="fa-solid fa-xmark"></i>
+          </button>
+        </div>
+
+        <div
+          style="
+            padding: 16px;
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+          "
+        >
+          <div>
+            <label class="field-label"
+              >Serviço <span class="req">*</span></label
+            >
+            <select
+              id="modalSelectServico"
+              class="field bg-slate-800 text-white"
+            >
+              <option value="">Selecione...</option>
+            </select>
+          </div>
+
+          <!-- Grupo de Cor (Reforma) -->
+          <div id="modalGrupoCor" class="hidden">
+            <label class="field-label"
+              >Cor da Roda <span class="req">*</span></label
+            >
+            <input
+              type="text"
+              id="modalInputCor"
+              class="field"
+              placeholder="Ex: BLACK PIANO"
+              autocomplete="off"
+            />
+          </div>
+
+          <!-- Grupo de Número OS (Conserto/Solda) -->
+          <div id="modalGrupoNumero" class="hidden">
+            <label class="field-label"
+              >Número da OS <span class="req">*</span></label
+            >
+            <input
+              type="text"
+              id="modalInputNumero"
+              class="field"
+              placeholder="Digite o número"
+              inputmode="numeric"
+              autocomplete="off"
+            />
+          </div>
+
+          <div class="grid grid-cols-2 gap-2">
+            <div>
+              <label class="field-label"
+                >Quantidade <span class="req">*</span></label
+              >
+              <input
+                type="number"
+                id="modalInputQtd"
+                min="1"
+                value="1"
+                class="field bg-slate-800 text-white"
+              />
+            </div>
+            <div>
+              <label class="field-label"
+                >Valor (R$) <span class="req">*</span></label
+              >
+              <input
+                type="tel"
+                id="modalInputValor"
+                class="field bg-slate-800 text-white font-bold text-emerald-400"
+                placeholder="R$ 0,00"
+              />
+            </div>
+          </div>
+        </div>
+
+        <div
+          style="
+            padding: 16px;
+            border-top: 1px solid #e2e8f0;
+            background: #f8fafc;
+          "
+        >
+          <button
+            id="btnConfirmarItem"
+            class="submit-button"
+            style="height: 44px; font-size: 14px"
+          >
+            <i class="fa-solid fa-plus"></i> Adicionar à OS
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- MODAL DE DETALHES DO SERVIÇO (MANTIDO PARA COMPATIBILIDADE, MAS OCULTO) -->
+    <div
+      id="modalDetalhesServico"
+      class="modal-custom"
+      style="z-index: 1500; display: none"
+    >
       <div class="modal-box" onclick="event.stopPropagation()">
         <div class="modal-header">
           <span id="tituloModalDetalhes"
@@ -98,9 +217,9 @@
           "
         >
           <div id="grupoCorModal">
-            <label for="inputCor" class="field-label">
-              Cor <span class="req">*</span>
-            </label>
+            <label for="inputCor" class="field-label"
+              >Cor <span class="req">*</span></label
+            >
             <input
               type="text"
               id="inputCor"
@@ -110,9 +229,9 @@
             />
           </div>
           <div>
-            <label for="inputNumeroOSDinamico" class="field-label">
-              Número da OS <span class="req">*</span>
-            </label>
+            <label for="inputNumeroOSDinamico" class="field-label"
+              >Número da OS <span class="req">*</span></label
+            >
             <input
               type="text"
               id="inputNumeroOSDinamico"
@@ -168,7 +287,7 @@
       class="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm hidden flex items-center justify-center p-3"
     >
       <div
-        class="bg-white rounded-2xl flex flex-col overflow-hidden shadow-2xl"
+        class="bg-white rounded-2xl flex flex-col overflow-hidden shadow-2xl w-full max-w-md h-[80vh]"
       >
         <div
           class="bg-[#172033] text-white p-4 flex items-center justify-between flex-shrink-0"
@@ -244,14 +363,12 @@
         >
           <i class="fa-solid fa-chevron-left"></i>
         </button>
-
         <img
           id="imagemAmpliada"
           src=""
           class="max-w-full max-h-full object-contain rounded-lg shadow-2xl mx-auto transition-opacity duration-200"
           alt="Foto Ampliada"
         />
-
         <button
           id="btnNext"
           class="absolute right-2 md:right-10 z-10 w-12 h-12 rounded-full bg-white/10 hover:bg-white/20 flex items-center justify-center text-white text-xl transition hidden"
@@ -342,7 +459,6 @@
                 <button type="button" id="btnDDI" class="btn-ddi">
                   🇧🇷 +55
                 </button>
-
                 <div class="field-wrap">
                   <i class="fa-solid fa-phone field-icon"></i>
                   <input
@@ -379,54 +495,13 @@
               class="flex flex-col gap-2 mb-3"
             ></div>
 
-            <!-- FORMULÁRIO PARA SELECIONAR O ITEM ATUAL -->
-            <div class="grid grid-cols-3 gap-2">
-              <div>
-                <label for="selectServico" class="field-label"
-                  >Serviço <span class="req">*</span></label
-                >
-                <input type="hidden" id="servico" name="servico" />
-                <input type="hidden" id="quantidade" name="quantidade" />
-                <select
-                  id="selectServico"
-                  class="w-full h-11 px-3 bg-slate-800 text-white text-sm rounded-lg border border-slate-700 outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/30 transition-colors"
-                >
-                  <option value="">Selecione...</option>
-                </select>
-              </div>
-              <div>
-                <label for="inputQtd" class="field-label"
-                  >Qtd <span class="req">*</span></label
-                >
-                <input
-                  id="inputQtd"
-                  type="number"
-                  min="1"
-                  value="1"
-                  class="w-full h-11 px-3 bg-slate-800 text-white text-sm rounded-lg border border-slate-700 outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/30 transition-colors"
-                />
-              </div>
-              <div>
-                <label for="valor" class="field-label"
-                  >Valor <span class="req">*</span></label
-                >
-                <input
-                  id="valor"
-                  name="valor"
-                  class="w-full h-11 px-3 bg-slate-800 text-white text-sm rounded-lg border border-slate-700 outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/30 transition-colors"
-                  type="tel"
-                  placeholder="R$ 0,00"
-                />
-              </div>
-            </div>
-
-            <!-- BOTÃO DE ADICIONAR À LISTA -->
+            <!-- BOTÃO DE ADICIONAR À LISTA (NOVO ESTILO) -->
             <button
               type="button"
               id="btnAdicionarItem"
-              class="mt-3 w-full h-10 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 text-xs font-bold rounded-lg border border-indigo-200 transition-colors flex items-center justify-center gap-2"
+              class="w-full h-12 bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-bold rounded-lg shadow-md transition-colors flex items-center justify-center gap-2 mb-3"
             >
-              <i class="fa-solid fa-plus"></i> ADICIONAR ESTE SERVIÇO À OS
+              <i class="fa-solid fa-plus"></i> Adicionar Serviço
             </button>
 
             <div class="mt-3">
@@ -481,8 +556,6 @@
     <!-- Bibliotecas e Módulo Principal -->
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <script>
-      // Garante window.Camera disponível quando rodando como app nativo (Capacitor).
-      // No web puro o branch isNativePlatform() nem executa, então é inofensivo.
       (function setupCamera() {
         if (
           window.Capacitor &&
