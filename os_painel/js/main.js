@@ -34,6 +34,7 @@ import {
 } from "./ui.js";
 import { setTouchStartX, setTouchEndX, exibirFaturamento } from "./state.js";
 import { toast } from "./utils.js";
+import { criarDropdownCustom } from "./views/dropdownCustom.js";
 
 /* ---------- DETECÇÃO DE ELECTRON ---------- */
 if (navigator.userAgent.includes("Electron")) {
@@ -141,10 +142,30 @@ document.getElementById("searchInput").addEventListener("input", (e) => {
   timeoutBusca = setTimeout(() => recarregarListaOS(), 350);
 });
 
-document.getElementById("sortSelect").addEventListener("change", (e) => {
-  estado.ordenacao = e.target.value;
-  recarregarListaOS();
-});
+/* ===== sortSelect: agora é dropdown customizado ===== */
+{
+  const container = document.getElementById("sortSelect");
+  if (container) {
+    const dropdown = criarDropdownCustom({
+      id: "sortSelect",
+      name: "ordenacao",
+      value: estado.ordenacao || "data-desc",
+      options: [
+        { value: "data-desc", text: "Recentes" },
+        { value: "data-asc", text: "Antigas" },
+        { value: "nome-asc", text: "A-Z" },
+        { value: "nome-desc", text: "Z-A" },
+      ],
+      className: "w-full",
+    });
+    container.replaceWith(dropdown);
+
+    dropdown.addEventListener("change", () => {
+      estado.ordenacao = dropdown.value;
+      recarregarListaOS();
+    });
+  }
+}
 
 const inputDataInicial = document.getElementById("dataInicial");
 const inputDataFinal = document.getElementById("dataFinal");
@@ -171,11 +192,9 @@ if (btnLimparDatas) {
   });
 }
 
-document
-  .getElementById("modalDetalhes")
-  .addEventListener("click", (e) => {
-    if (e.target.id === "modalDetalhes") fecharModal();
-  });
+document.getElementById("modalDetalhes").addEventListener("click", (e) => {
+  if (e.target.id === "modalDetalhes") fecharModal();
+});
 
 document.getElementById("lightbox").addEventListener(
   "touchstart",
@@ -233,7 +252,10 @@ document.addEventListener(
     if (!(alvo instanceof HTMLImageElement)) return;
     if (alvo.classList.contains("os-foto")) tratarFotoQuebrada(alvo);
     if (alvo.id === "lightboxImg" && alvo.getAttribute("src")) {
-      toast("Esta foto não pôde ser carregada. Ela pode ter sido apagada.", "error");
+      toast(
+        "Esta foto não pôde ser carregada. Ela pode ter sido apagada.",
+        "error",
+      );
     }
   },
   true,
@@ -241,7 +263,10 @@ document.addEventListener(
 
 /* Rede caiu / voltou enquanto o app está aberto. */
 window.addEventListener("offline", () => {
-  toast("Sem conexão com a internet. As alterações não serão salvas até a rede voltar.", "error");
+  toast(
+    "Sem conexão com a internet. As alterações não serão salvas até a rede voltar.",
+    "error",
+  );
 });
 window.addEventListener("online", () => {
   toast("Conexão restabelecida. Atualizando…");
