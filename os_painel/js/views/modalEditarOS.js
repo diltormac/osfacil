@@ -11,6 +11,8 @@ import {
 } from "../utils.js";
 import { fecharCamadaPorId } from "./helpers.js";
 import { compartilharTexto } from "../compartilhamento.js";
+import { criarDropdownCustom } from "./dropdownCustom.js";
+import { supabaseClient } from "../config.js"; // Import necessário para buscar os dados completos
 
 let fotografiaFormulario = "";
 
@@ -173,12 +175,47 @@ function formularioAlterado() {
   );
 }
 
-export function abrirDetalhes(id) {
-  const os = listaOS.find((o) => o.id === id);
+export async function abrirDetalhes(idOuObjeto) {
+  // Verifica se o que veio foi o ID (número) ou o objeto completo da OS (vindo da galeria)
+  let os = null;
+  if (typeof idOuObjeto === "object" && idOuObjeto !== null) {
+    os = idOuObjeto;
+  } else {
+    os = listaOS.find((o) => o.id === idOuObjeto);
+  }
+
   if (!os) {
     toast("Esta OS não existe mais. Atualize a lista.", "error");
     return;
   }
+
+  const id = os.id;
+
+  // =========================================================
+  // CORREÇÃO: Se o objeto veio da galeria, ele está incompleto.
+  // Precisamos buscar os dados completos no banco antes de abrir.
+  // =========================================================
+  if (!os.itens_servicos || !os.telefone) {
+    toast("Carregando dados da OS...");
+    try {
+      const { data, error } = await supabaseClient
+        .from("ordens_servico")
+        .select("*")
+        .eq("id", id)
+        .single();
+
+      if (error) throw error;
+      if (data) os = data; // Substitui o objeto vazio pelo completo do banco
+    } catch (err) {
+      console.error("Erro ao buscar OS completa:", err);
+      toast(
+        "Erro ao carregar os detalhes completos. Tente novamente.",
+        "error",
+      );
+      return;
+    }
+  }
+  // =========================================================
 
   // Rascunho independente: cancelar não altera a OS nem o faturamento.
   setItensRascunho(
@@ -201,7 +238,7 @@ export function abrirDetalhes(id) {
     ? os.numero_os_conserto || os.numero_os || ""
     : os.numero_os || "";
 
-  const fotosValidas = os.fotos_urls
+  const fotosValidas = (os.fotos_urls || [])
     .map((url, idx) => ({ url, idx }))
     .filter(({ url }) => urlSegura(url));
   const fotosHTML = fotosValidas.length
@@ -212,9 +249,6 @@ export function abrirDetalhes(id) {
         )
         .join("")}</div>`
     : `<p class="text-xs text-slate-500 italic bg-slate-50 p-4 rounded-lg text-center">Nenhuma foto cadastrada nesta OS.</p>`;
-
-  const opcaoStatus = (s) =>
-    `<option value="${s}" ${os.status === s ? "selected" : ""}>${s}</option>`;
 
   document.getElementById("modalBody").innerHTML = `
     <div class="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
@@ -230,10 +264,8 @@ export function abrirDetalhes(id) {
         </div>
       </div>
       <div>
-        <label for="editStatus" class="text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1 block">Status</label>
-        <select id="editStatus" class="edit-input font-semibold">
-          ${["Pendente", "Em andamento", "Concluído", "Cancelado"].map(opcaoStatus).join("")}
-        </select>
+        <label class="text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1 block">Status</label>
+        <div id="editStatus"></div>
       </div>
     </div>
 
@@ -310,7 +342,27 @@ export function abrirDetalhes(id) {
 
   atualizarHTMLItensModal();
   document.getElementById("modalDetalhes").classList.add("show");
+
+  // ===== editStatus: agora é dropdown customizado =====
+  const editStatusContainer = document.getElementById("editStatus");
+  if (editStatusContainer) {
+    const statusDropdown = criarDropdownCustom({
+      id: "editStatus",
+      name: "status",
+      value: os.status || "Pendente",
+      options: [
+        { value: "Pendente", text: "Pendente" },
+        { value: "Em andamento", text: "Em andamento" },
+        { value: "Concluído", text: "Concluído" },
+        { value: "Cancelado", text: "Cancelado" },
+      ],
+      className: "w-full",
+    });
+    editStatusContainer.replaceWith(statusDropdown);
+  }
+
   fotografiaFormulario = lerFormulario();
+
   document.getElementById("editStatus").focus();
 }
 

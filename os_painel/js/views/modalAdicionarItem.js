@@ -2,7 +2,10 @@ import { itensRascunho, setItensRascunho } from "../state.js";
 import { esc, formatarMoeda, lerValor, toast } from "../utils.js";
 import { obterCatalogoServicos } from "../catalogoStore.js";
 import { modalGerenciarCatalogo } from "./modalCatalogo.js";
-import { recalcularValorDoRascunho, atualizarHTMLItensModal } from "./modalEditarOS.js";
+import {
+  recalcularValorDoRascunho,
+  atualizarHTMLItensModal,
+} from "./modalEditarOS.js";
 
 export async function atualizarOpcoesSeletorServico() {
   const lista = document.getElementById("dropdownServicoLista");
@@ -71,7 +74,7 @@ export async function modalAdicionarItem() {
           <input type="number" id="inputNovaQtd" value="1" min="1" max="999" step="1" class="edit-input font-bold" />
         </div>
         <div>
-          <label for="inputNovoValor" class="text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1 block">Valor unitário (R$)</label>
+          <label for="inputNovoValor" class="text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1 block">Valor Total (R$)</label>
           <input type="text" inputmode="decimal" id="inputNovoValor" class="edit-input font-bold text-emerald-600" />
         </div>
       </div>
@@ -97,8 +100,44 @@ export async function modalAdicionarItem() {
   const fechar = () => divModalServico.remove();
   divModalServico.fecharCamada = fechar;
 
+  // Variáveis para controlar o cálculo
+  let valorUnitarioBase = 0;
+  let ignorarMascara = false;
+
   const formatarParaCampo = (v) =>
-    Number(v || 0).toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    Number(v || 0).toLocaleString("pt-BR", {
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2,
+    });
+
+  // Função que calcula o total
+  const recalcularTotal = () => {
+    const qtd = parseInt(qtdInput.value, 10) || 1;
+    if (valorUnitarioBase > 0) {
+      ignorarMascara = true;
+      valInput.value = formatarParaCampo(valorUnitarioBase * qtd);
+      ignorarMascara = false;
+    }
+  };
+
+  // Gatilho: Quando a quantidade muda, recalcula o total
+  qtdInput.addEventListener("input", recalcularTotal);
+
+  // Máscara manual no input de valor (se o usuário quiser digitar um valor diferente do catálogo)
+  valInput.addEventListener("input", (e) => {
+    if (ignorarMascara) return;
+    let v = e.target.value.replace(/\D/g, "");
+    v = (v / 100).toFixed(2) + "";
+    v = v.replace(".", ",");
+    v = v.replace(/(\d)(\d{3})(\d{3}),/g, "$1.$2.$3,");
+    v = v.replace(/(\d)(\d{3}),/g, "$1.$2,");
+    e.target.value = v;
+
+    // Atualiza o unitário base com base no que foi digitado e na qtd atual
+    const qtd = parseInt(qtdInput.value, 10) || 1;
+    const total = lerValor(v) || 0;
+    valorUnitarioBase = total / qtd;
+  });
 
   const fecharDropdown = () => {
     dropdownLista.classList.add("hidden");
@@ -120,25 +159,30 @@ export async function modalAdicionarItem() {
     if (!opcao) return;
     const valor = opcao.dataset.valor;
     sel.value = valor;
+
     if (valor === "outro") {
       dropdownTexto.textContent = "Outro serviço (digitar manualmente)…";
+      valorUnitarioBase = 0; // Força o usuário a digitar
     } else {
       const catalogo = await obterCatalogoServicos();
       const itemSel = catalogo[valor];
       dropdownTexto.textContent = itemSel
         ? `${itemSel.nome} — ${formatarMoeda(itemSel.valor)}`
         : "Selecione um serviço…";
+
+      if (itemSel) {
+        valorUnitarioBase = itemSel.valor; // Salva o valor de 1 unidade
+      }
     }
     fecharDropdown();
     sel.dispatchEvent(new Event("change"));
   });
 
-  // Fecha ao clicar fora do dropdown.
   const fecharAoClicarFora = (e) => {
     if (!dropdown.contains(e.target)) fecharDropdown();
   };
   document.addEventListener("click", fecharAoClicarFora);
-  // Remove o listener quando o modal for fechado.
+
   const fecharOriginal = fechar;
   divModalServico.fecharCamada = () => {
     document.removeEventListener("click", fecharAoClicarFora);
@@ -148,13 +192,17 @@ export async function modalAdicionarItem() {
   sel.addEventListener("change", async () => {
     if (sel.value === "outro") {
       grupoOutro.classList.remove("hidden");
+      valorUnitarioBase = 0;
       valInput.value = "0,00";
       inputOutro.focus();
     } else {
       grupoOutro.classList.add("hidden");
       const catalogo = await obterCatalogoServicos();
       const itemSel = catalogo[sel.value];
-      if (itemSel) valInput.value = formatarParaCampo(itemSel.valor);
+      if (itemSel) {
+        valorUnitarioBase = itemSel.valor;
+        recalcularTotal(); // Calcula o valor multiplicado logo que escolhe
+      }
     }
   });
 
@@ -166,53 +214,62 @@ export async function modalAdicionarItem() {
   });
   divModalServico.querySelector('[data-acao="cancelar"]').onclick = fechar;
 
-  divModalServico.querySelector("form").addEventListener("submit", async (e) => {
-    e.preventDefault();
-    let nomeFinal = "";
-    if (sel.value === "outro") {
-      nomeFinal = (inputOutro.value || "").trim().toUpperCase();
-      if (!nomeFinal) {
-        toast("Digite o nome do serviço.", "error");
-        inputOutro.focus();
+  divModalServico
+    .querySelector("form")
+    .addEventListener("submit", async (e) => {
+      e.preventDefault();
+      let nomeFinal = "";
+      if (sel.value === "outro") {
+        nomeFinal = (inputOutro.value || "").trim().toUpperCase();
+        if (!nomeFinal) {
+          toast("Digite o nome do serviço.", "error");
+          inputOutro.focus();
+          return;
+        }
+      } else {
+        const catalogo = await obterCatalogoServicos();
+        const itemSel = catalogo[sel.value];
+        if (!itemSel) {
+          toast("Escolha um serviço da lista.", "error");
+          sel.focus();
+          return;
+        }
+        nomeFinal = itemSel.nome;
+      }
+
+      const qtdFinal = parseInt(qtdInput.value, 10);
+      if (!Number.isInteger(qtdFinal) || qtdFinal < 1 || qtdFinal > 999) {
+        toast(
+          "Quantidade inválida. Use um número inteiro de 1 a 999.",
+          "error",
+        );
+        qtdInput.focus();
         return;
       }
-    } else {
-      const catalogo = await obterCatalogoServicos();
-      const itemSel = catalogo[sel.value];
-      if (!itemSel) {
-        toast("Escolha um serviço da lista.", "error");
-        sel.focus();
+
+      // Lê o valor total final
+      const valorTotalFinal = lerValor(valInput.value);
+      if (valorTotalFinal === null || valorTotalFinal < 0) {
+        toast("Valor inválido. Use apenas números, ex: 50,00.", "error");
+        valInput.focus();
         return;
       }
-      nomeFinal = itemSel.nome;
-    }
 
-    const qtdFinal = parseInt(qtdInput.value, 10);
-    if (!Number.isInteger(qtdFinal) || qtdFinal < 1 || qtdFinal > 999) {
-      toast("Quantidade inválida. Use um número inteiro de 1 a 999.", "error");
-      qtdInput.focus();
-      return;
-    }
-    const valorUnitario = lerValor(valInput.value);
-    if (valorUnitario === null || valorUnitario < 0) {
-      toast("Valor inválido. Use apenas números, ex: 50,00.", "error");
-      valInput.focus();
-      return;
-    }
+      setItensRascunho([
+        ...itensRascunho,
+        {
+          servico: nomeFinal,
+          quantidade: qtdFinal,
+          // Como o valor no modal agora é o Total, salva o total direto
+          valor: valorTotalFinal,
+        },
+      ]);
 
-    setItensRascunho([
-      ...itensRascunho,
-      {
-        servico: nomeFinal,
-        quantidade: qtdFinal,
-        valor: Math.round(valorUnitario * qtdFinal * 100) / 100,
-      },
-    ]);
-    recalcularValorDoRascunho();
-    atualizarHTMLItensModal();
-    fechar();
-    toast("Serviço adicionado. Clique em Salvar Alterações para gravar.");
-  });
+      recalcularValorDoRascunho();
+      atualizarHTMLItensModal();
+      fechar();
+      toast("Serviço adicionado. Clique em Salvar Alterações para gravar.");
+    });
 
   sel.focus();
 }

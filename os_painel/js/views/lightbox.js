@@ -1,5 +1,6 @@
 import {
   listaOS,
+  galeriaFotos,
   galeriaLightbox,
   indexLightboxAtual,
   setGaleriaLightbox,
@@ -10,7 +11,17 @@ import { urlSegura } from "../utils.js";
 let trocaLightbox = null;
 
 export function abrirLightboxPorOS(osId, indexInicial = 0) {
-  const os = listaOS.find((o) => o.id === osId);
+  // Tenta achar a OS na lista principal
+  let os = listaOS.find((o) => o.id === osId);
+
+  // Se não achar na principal (ex: veio da galeria paginada), busca na lista de fotos da galeria
+  if (!os) {
+    const fotoGaleria = galeriaFotos.find(
+      (f) => String(f.os.id) === String(osId),
+    );
+    if (fotoGaleria) os = fotoGaleria.os;
+  }
+
   const fotos = (os?.fotos_urls || []).filter((u) => urlSegura(u));
   if (!fotos.length) return;
 
@@ -29,7 +40,6 @@ export function atualizarLightbox() {
 
   img.style.opacity = 0;
 
-  // Cancela a troca anterior: navegar rápido não mostra a foto errada.
   clearTimeout(trocaLightbox);
   trocaLightbox = setTimeout(() => {
     img.src = galeriaLightbox[indexLightboxAtual] || "";
