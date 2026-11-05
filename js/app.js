@@ -1,6 +1,7 @@
 import { supabaseClient } from "./supabase.js";
 import { comprimirImagemWeb } from "./camera.js";
 import { salvarOSOffline, sincronizarPendentes } from "./database.js";
+import { criarDropdownCustom } from "./dropdownCustom.js";
 
 const MAX_FOTOS = 6;
 const form = document.getElementById("osForm");
@@ -29,6 +30,13 @@ let numeroOSConserto = "";
 let itensOS = [];
 let opcoesServico = [];
 
+// Instância do dropdown customizado de serviço
+let dropdownServico = null;
+
+// Controle de multiplicação de valor
+let valorUnitarioAtual = 0;
+let ignorarMascaraValor = false;
+
 const CATALOGO_SERVICOS_KEY = "@osfacil_catalogo_servicos";
 const CATALOGO_SERVICOS_FALLBACK = [
   { nome: "Alinhamento", valor: 50 },
@@ -40,7 +48,6 @@ const CATALOGO_SERVICOS_FALLBACK = [
   { nome: "Reforma", valor: 200 },
 ];
 
-// Função para gerar um código único e seguro
 function gerarUUID() {
   return "xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx".replace(/[xy]/g, function (c) {
     var r = (Math.random() * 16) | 0,
@@ -120,7 +127,9 @@ function formatarValorInput(valorNumerico) {
 const btnAdicionarItem = document.getElementById("btnAdicionarItem");
 const containerItens = document.getElementById("containerItensAdicionados");
 const modalAdicionar = document.getElementById("modalAdicionarServico");
-const modalSelectServico = document.getElementById("modalSelectServico");
+const modalSelectServicoContainer =
+  document.getElementById("modalSelectServico");
+
 const modalGrupoCor = document.getElementById("modalGrupoCor");
 const modalInputCor = document.getElementById("modalInputCor");
 const modalGrupoNumero = document.getElementById("modalGrupoNumero");
@@ -128,55 +137,70 @@ const modalInputNumero = document.getElementById("modalInputNumero");
 const modalInputQtd = document.getElementById("modalInputQtd");
 const modalInputValor = document.getElementById("modalInputValor");
 
-modalInputValor.addEventListener("input", (e) => {
-  let v = e.target.value.replace(/\D/g, "");
-  v = (v / 100).toFixed(2) + "";
-  v = v.replace(".", ",");
-  v = v.replace(/(\d)(\d{3})(\d{3}),/g, "$1.$2.$3,");
-  v = v.replace(/(\d)(\d{3}),/g, "$1.$2,");
-  e.target.value = "R$ " + v;
-});
+/* =========================================================
+   DROPDOWN CUSTOMIZADO DE SERVIÇO
+   ========================================================= */
+function montarOpcoesDropdownServico() {
+  return opcoesServico.map((item) => {
+    // Converte o valor para número (se for vazio, nulo ou texto inválido, vira 0)
+    const valorNumerico = Number(item.valor) || 0;
 
-btnAdicionarItem.onclick = () => {
-  modalSelectServico.value = "";
-  modalInputQtd.value = "1";
-  modalInputValor.value = "";
-  modalInputCor.value = "";
-  modalInputNumero.value = "";
-  modalGrupoCor.classList.add("hidden");
-  modalGrupoNumero.classList.add("hidden");
+    return {
+      value: item.nome,
+      text: item.nome,
+      // Se o valor for maior que 0, formata normal. Se for 0, força o "R$ 0,00"
+      extra: valorNumerico > 0 ? formatarValorInput(valorNumerico) : "R$ 0,00",
+    };
+  });
+}
 
-  corReforma = "";
-  numeroOSReforma = "";
-  numeroOSConserto = "";
+function criarDropdownServicoSeNecessario() {
+  const opts = montarOpcoesDropdownServico();
 
-  modalSelectServico.innerHTML = '<option value="">Selecione...</option>';
-  opcoesServico.forEach((item) => {
-    const opt = document.createElement("option");
-    opt.value = item.nome;
-    opt.textContent = item.nome;
-    modalSelectServico.appendChild(opt);
+  dropdownServico = criarDropdownCustom({
+    id: "modalSelectServico",
+    name: "servico",
+    value: "",
+    placeholder: "Selecione...",
+    options: opts,
+    tema: "dark",
+    className: "w-full",
+    onChange: async (val) => {
+      await aoSelecionarServico(val);
+    },
   });
 
-  modalAdicionar.classList.add("show");
-};
+  const atual = document.getElementById("modalSelectServico");
+  if (atual && atual !== dropdownServico) {
+    atual.replaceWith(dropdownServico);
+  }
+}
 
-document.getElementById("btnFecharModalAdicionar").onclick = () => {
-  modalAdicionar.classList.remove("show");
-};
+// Função que calcula o valor (Unitário x Qtd)
+function atualizarValorTotalModal() {
+  const qtd = parseInt(modalInputQtd.value) || 1;
+  if (valorUnitarioAtual > 0) {
+    ignorarMascaraValor = true;
+    modalInputValor.value = formatarValorInput(valorUnitarioAtual * qtd);
+    ignorarMascaraValor = false;
+  } else {
+    ignorarMascaraValor = true;
+    modalInputValor.value = "";
+    ignorarMascaraValor = false;
+  }
+}
 
-modalSelectServico.addEventListener("change", async (e) => {
-  const servNome = e.target.value;
-  const servUpper = servNome.toUpperCase();
+async function aoSelecionarServico(servNome) {
+  const servUpper = (servNome || "").toUpperCase();
 
   modalGrupoCor.classList.add("hidden");
   modalGrupoNumero.classList.add("hidden");
-  modalInputValor.value = "";
 
   const itemCat = opcoesServico.find((i) => i.nome === servNome);
-  if (itemCat && itemCat.valor > 0) {
-    modalInputValor.value = formatarValorInput(itemCat.valor);
-  }
+
+  // Guarda o valor UNITÁRIO para multiplicar pela quantidade
+  valorUnitarioAtual = itemCat ? itemCat.valor : 0;
+  atualizarValorTotalModal();
 
   if (servUpper === "REFORMA") {
     modalGrupoCor.classList.remove("hidden");
@@ -202,7 +226,55 @@ modalSelectServico.addEventListener("change", async (e) => {
       buscarProximoNumero(false, modalInputNumero);
     }
   }
+}
+
+// Máscara de valor no modal
+modalInputValor.addEventListener("input", (e) => {
+  if (ignorarMascaraValor) return;
+
+  let v = e.target.value.replace(/\D/g, "");
+  v = (v / 100).toFixed(2) + "";
+  v = v.replace(".", ",");
+  v = v.replace(/(\d)(\d{3})(\d{3}),/g, "$1.$2.$3,");
+  v = v.replace(/(\d)(\d{3}),/g, "$1.$2,");
+  e.target.value = "R$ " + v;
+
+  // Se o usuário digitar manualmente, atualiza o valor unitário
+  const qtd = parseInt(modalInputQtd.value) || 1;
+  const total = parseFloat(v.replace(/\./g, "").replace(",", ".")) || 0;
+  valorUnitarioAtual = total / qtd;
 });
+
+// Escuta a mudança de quantidade para multiplicar
+modalInputQtd.addEventListener("input", atualizarValorTotalModal);
+
+btnAdicionarItem.onclick = () => {
+  criarDropdownServicoSeNecessario();
+  if (dropdownServico) dropdownServico.value = "";
+
+  // Limpa os campos
+  modalInputQtd.value = "1";
+  modalInputValor.value = "";
+  valorUnitarioAtual = 0;
+  modalInputCor.value = "";
+  modalInputNumero.value = "";
+  modalGrupoCor.classList.add("hidden");
+  modalGrupoNumero.classList.add("hidden");
+
+  corReforma = "";
+  numeroOSReforma = "";
+  numeroOSConserto = "";
+
+  modalAdicionar.classList.add("show");
+};
+
+document.getElementById("btnFecharModalAdicionar").onclick = () => {
+  modalAdicionar.classList.remove("show");
+  // Adicione esta verificação para fechar a lista caso ela esteja aberta
+  if (dropdownServico && dropdownServico.fechar) {
+    dropdownServico.fechar();
+  }
+};
 
 async function buscarProximoNumero(isReforma, inputNum) {
   inputNum.placeholder = "Buscando...";
@@ -285,7 +357,7 @@ async function buscarProximoNumero(isReforma, inputNum) {
 }
 
 document.getElementById("btnConfirmarItem").onclick = () => {
-  const serv = modalSelectServico.value;
+  const serv = dropdownServico ? dropdownServico.value : "";
   if (!serv) {
     mostrarToast("Selecione um serviço antes de adicionar.", "erro");
     return;
@@ -685,11 +757,10 @@ form.addEventListener("submit", async (event) => {
   const valorTotalGeral = itensOS.reduce((soma, i) => soma + i.valor, 0);
   const qtdTotalGeral = itensOS.reduce((soma, i) => soma + i.quantidade, 0);
 
-  // GERA A CHAVE ÚNICA DE SEGURANÇA
   const uuidLocal = gerarUUID();
 
   const cadastro = {
-    uuid_local: uuidLocal, // Salva no banco para evitar duplicação
+    uuid_local: uuidLocal,
     nome: nomeFinal,
     telefone: telefoneCompleto,
     servico: servicosResumo,
@@ -726,7 +797,6 @@ form.addEventListener("submit", async (event) => {
 
       const cadastroFinal = { ...cadastro, fotos_urls: urlsDasFotos };
 
-      // Tenta inserir. Se a internet cair, vai pro Catch e salva offline.
       const { error } = await supabaseClient
         .from("ordens_servico")
         .insert([cadastroFinal]);
@@ -734,7 +804,6 @@ form.addEventListener("submit", async (event) => {
 
       mostrarToast("Pré-cadastro enviado com sucesso!", "sucesso");
     } else {
-      // Salva com o UUID para o sincronizador não duplicar depois
       await salvarOSOffline(cadastro, arquivosFotos);
       mostrarToast("Sem internet. Salvo no celular com segurança!", "sucesso");
     }
@@ -752,6 +821,7 @@ form.addEventListener("submit", async (event) => {
 
     modalInputCor.value = "";
     modalInputNumero.value = "";
+    valorUnitarioAtual = 0;
 
     fotos = [];
     renderFotos();
@@ -763,11 +833,7 @@ form.addEventListener("submit", async (event) => {
       "Erro ao enviar (conexão instável). Salvando no celular...",
       "erro",
     );
-
-    // Salva offline usando o mesmo UUID gerado
     await salvarOSOffline(cadastro, arquivosFotos);
-
-    // Limpa o form mesmo assim, pois a OS já está a salvo no celular
     form.reset();
     itensOS = [];
     renderizarItensOS();
@@ -779,6 +845,7 @@ form.addEventListener("submit", async (event) => {
     numeroOSConserto = "";
     modalInputCor.value = "";
     modalInputNumero.value = "";
+    valorUnitarioAtual = 0;
     fotos = [];
     renderFotos();
     photoSection.classList.remove("has-error");
@@ -969,9 +1036,11 @@ function atualizarCarrossel() {
   }
 }
 
-carregarServicosFormulario();
-renderFotos();
-atualizarProgresso();
+carregarServicosFormulario().then(() => {
+  renderFotos();
+  atualizarProgresso();
+});
+
 setInterval(() => sincronizarPendentes(mostrarToast), 15000);
 window.addEventListener("online", () => {
   mostrarToast("Internet voltou! Sincronizando...", "sucesso");
