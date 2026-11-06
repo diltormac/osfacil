@@ -3,6 +3,7 @@ export let listaOS = [];
 export let estado = {
   view: "dashboard",
   filtroStatus: "all",
+  filtroServico: "all",
   busca: "",
   ordenacao: "data-desc",
   dataInicial: "",

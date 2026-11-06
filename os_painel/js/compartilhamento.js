@@ -1,58 +1,94 @@
 /**
- * Módulo independente de compartilhamento de texto.
- * Não depende de nenhuma aplicação específica — pode ser reutilizado.
- *
- * Uso:
- *   const resultado = await compartilharTexto({ titulo, texto });
- *   // resultado.status: "compartilhado" | "copiado" | "cancelado" | "manual" | "erro"
+ * Compartilha um texto e/ou uma imagem real (baixando o arquivo).
+ * Usa o objeto global window.Capacitor para evitar erros de módulo no navegador.
  */
-
-/**
- * Baixa uma URL de imagem e devolve um File pronto para navigator.share.
- * Retorna null se não for possível (rede, CORS, tipo inválido).
- */
-async function baixarComoArquivo(url, nomeArquivo = "os.jpg") {
-  try {
-    const resposta = await fetch(url, { mode: "cors" });
-    if (!resposta.ok) return null;
-    const blob = await resposta.blob();
-    if (!blob || !blob.size) return null;
-    const tipo = blob.type && blob.type.startsWith("image/")
-      ? blob.type
-      : "image/jpeg";
-    const extensao = tipo.split("/")[1] || "jpg";
-    const nome = nomeArquivo.replace(/\.[^.]+$/, "") + "." + extensao;
-    return new File([blob], nome, { type: tipo });
-  } catch (e) {
-    console.warn("Não foi possível baixar a foto para compartilhar.", e);
-    return null;
-  }
-}
-
-/**
- * Compartilha um texto (e opcionalmente uma foto) usando a melhor
- * estratégia disponível no ambiente.
- *
- * Ordem de tentativa:
- *   1. navigator.share() com files (quando suportado) — Android, iOS, navegadores modernos
- *   2. navigator.share() só com texto
- *   3. navigator.clipboard.writeText() — copia para a área de transferência (Electron, desktop)
- *   4. window.prompt() — último recurso, permite cópia manual
- *
- * @param {{ titulo?: string, texto: string, fotoUrl?: string }} opcoes
- * @returns {Promise<{ status: "compartilhado" | "copiado" | "cancelado" | "manual" | "erro", erro?: unknown }>}
- */
-export async function compartilharTexto({ titulo = "", texto = "", fotoUrl = "" } = {}) {
+export async function compartilharTexto({
+  titulo = "",
+  texto = "",
+  fotoUrl = "",
+} = {}) {
   const conteudo = String(texto ?? "");
 
-  // 1) Menu nativo de compartilhamento (com foto, se possível).
+  // Verifica se está rodando no APK (Capacitor)
+  const ehNativo = window.Capacitor?.isNativePlatform?.() || false;
+
+  // ==========================================
+  // 1. APLICATIVO ANDROID/IOS (Capacitor)
+  // ==========================================
+  if (ehNativo) {
+    try {
+      const Share = window.Capacitor?.Plugins?.Share;
+      const Filesystem = window.Capacitor?.Plugins?.Filesystem;
+
+      if (!Share || !Filesystem) {
+        throw new Error("Plugins do Capacitor não encontrados.");
+      }
+
+      let arquivoParaCompartilhar = null;
+
+      // Se tem foto, precisamos baixar e salvar no celular
+      if (fotoUrl) {
+        // 1. Baixa a imagem da internet
+        const resposta = await fetch(fotoUrl);
+        const blob = await resposta.blob();
+
+        // 2. Converte para Base64 (necessário para o plugin de arquivos)
+        const base64Data = await new Promise((resolve, reject) => {
+          const reader = new FileReader();
+          reader.onloadend = () => resolve(reader.result.split(",")[1]);
+          reader.onerror = reject;
+          reader.readAsDataURL(blob);
+        });
+
+        // 3. Salva no cache do celular
+        const nomeArquivo = `os-foto-${Date.now()}.jpg`;
+        const resultadoArquivo = await Filesystem.writeFile({
+          path: nomeArquivo,
+          data: base64Data,
+          directory: "CACHE", // Usa string para evitar erro de importação
+        });
+
+        // 4. Pega o caminho real do arquivo
+        arquivoParaCompartilhar = resultadoArquivo.uri;
+      }
+
+      // 5. Abre o menu de compartilhamento do Android
+      await Share.share({
+        title: titulo,
+        text: conteudo,
+        url: arquivoParaCompartilhar || fotoUrl || undefined,
+        dialogTitle: "Compartilhar OS",
+      });
+
+      return { status: "compartilhado" };
+    } catch (e) {
+      if (e && e.message && e.message.toLowerCase().includes("cancel")) {
+        return { status: "cancelado" };
+      }
+      console.warn("Compartilhamento nativo falhou, tentando clipboard.", e);
+    }
+  }
+
+  // ==========================================
+  // 2. NAVEGADOR WEB (navigator.share)
+  // ==========================================
   if (
+    !ehNativo &&
     typeof navigator !== "undefined" &&
     typeof navigator.share === "function"
   ) {
     let arquivo = null;
     if (fotoUrl) {
-      arquivo = await baixarComoArquivo(fotoUrl);
+      try {
+        const resposta = await fetch(fotoUrl, { mode: "cors" });
+        const blob = await resposta.blob();
+        arquivo = new File([blob], "os.jpg", { type: blob.type });
+      } catch (err) {
+        console.warn(
+          "Não foi possível baixar a foto para compartilhar na web.",
+          err,
+        );
+      }
     }
 
     const podeCompartilharArquivo =
@@ -72,16 +108,16 @@ export async function compartilharTexto({ titulo = "", texto = "", fotoUrl = "" 
       }
       return { status: "compartilhado" };
     } catch (e) {
-      // Usuário cancelou o menu nativo — não é erro.
       if (e && e.name === "AbortError") {
         return { status: "cancelado" };
       }
-      // Outro erro: cai para o clipboard.
-      console.warn("Compartilhamento nativo falhou; tentando clipboard.", e);
+      console.warn("Compartilhamento web falhou; tentando clipboard.", e);
     }
   }
 
-  // 2) Área de transferência.
+  // ==========================================
+  // 3. FALLBACK: ÁREA DE TRANSFERÊNCIA
+  // ==========================================
   if (
     typeof navigator !== "undefined" &&
     navigator.clipboard &&
@@ -95,7 +131,9 @@ export async function compartilharTexto({ titulo = "", texto = "", fotoUrl = "" 
     }
   }
 
-  // 3) Último recurso: prompt para cópia manual.
+  // ==========================================
+  // 4. ÚLTIMO RECURSO: PROMPT MANUAL
+  // ==========================================
   try {
     if (typeof window !== "undefined" && typeof window.prompt === "function") {
       window.prompt("Copie o texto abaixo:", conteudo);

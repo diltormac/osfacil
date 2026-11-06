@@ -55,7 +55,6 @@ function normalizarOS(item) {
   };
 }
 
-/* Monta a consulta de OS aplicando filtros de status, busca e datas. */
 function montarConsultaOS({
   comRange = true,
   limite = TAMANHO_PAGINA_OS,
@@ -63,22 +62,46 @@ function montarConsultaOS({
 } = {}) {
   let consulta = supabaseClient.from("ordens_servico").select("*");
 
+  // Filtro de Status
   if (estado.filtroStatus && estado.filtroStatus !== "all") {
     consulta = consulta.eq("status", estado.filtroStatus);
   }
 
-  const termo = estado.busca.trim();
-  if (termo) {
-    const q = normalizar(termo);
-    const qDigitos = q.replace(/\D/g, "");
-    const partes = [];
-    partes.push(`busca_normalizada.ilike.%${q.replace(/[%,]/g, "")}%`);
-    if (qDigitos.length >= 4) {
-      partes.push(`telefone.ilike.%${qDigitos}%`);
-    }
-    consulta = consulta.or(partes.join(","));
+  // Filtro de Serviço
+  if (estado.filtroServico && estado.filtroServico !== "all") {
+    consulta = consulta.ilike("servico", `%${estado.filtroServico}%`);
   }
 
+  const termo = estado.busca.trim();
+  if (termo) {
+    // Normaliza o texto (tira acentos e deixa minúsculo) para buscar no banco
+    const q = normalizar(termo);
+    // Extrai apenas os números (para busca de telefone)
+    const qDigitos = q.replace(/\D/g, "");
+
+    // Prepara a lista de condições (OR)
+    const partes = [];
+
+    // 1. Condição de Texto: Busca nomes, serviços, observações, etc.
+    // Remove caracteres que o PostgREST do Supabase usa para separar comandos
+    const textoSeguro = q.replace(/[%,()]/g, "").trim();
+    if (textoSeguro) {
+      partes.push(`busca_normalizada.ilike.%${textoSeguro}%`);
+    }
+
+    // 2. Condição de Telefone: Só tenta buscar se tiver números suficientes
+    if (qDigitos.length >= 3) {
+      // Tenta achar a sequência de números no telefone
+      partes.push(`telefone.ilike.%${qDigitos}%`);
+    }
+
+    // Aplica a busca combinada (se houver alguma parte válida)
+    if (partes.length > 0) {
+      consulta = consulta.or(partes.join(","));
+    }
+  }
+
+  // Filtros de Data
   if (estado.dataInicial) {
     consulta = consulta.gte("created_at", `${estado.dataInicial}T00:00:00`);
   }
@@ -86,6 +109,7 @@ function montarConsultaOS({
     consulta = consulta.lte("created_at", `${estado.dataFinal}T23:59:59`);
   }
 
+  // Ordenação
   switch (estado.ordenacao) {
     case "data-asc":
       consulta = consulta.order("created_at", { ascending: true });
@@ -105,6 +129,7 @@ function montarConsultaOS({
   if (comRange) {
     consulta = consulta.range(offset, offset + limite - 1);
   }
+
   return consulta;
 }
 
@@ -398,6 +423,7 @@ export async function salvarEdicoes(id) {
       "O valor total não pode ser negativo.",
     );
 
+  // 1. Atualiza a cor dos itens de reforma e prepara a lista final
   const itensAtualizados = itensRascunho.map((item) => {
     const nomeItem = String(item.servico || "").toUpperCase();
     if (nomeItem.includes("REFORMA")) {
@@ -407,6 +433,21 @@ export async function salvarEdicoes(id) {
     }
   });
 
+  // 2. Recalcula o campo "servico" e "quantidade" para a tabela principal
+  let servicoResumo = "";
+  let quantidadeResumo = 0;
+
+  if (itensAtualizados.length > 0) {
+    const nomesUnicos = [
+      ...new Set(itensAtualizados.map((i) => String(i.servico).toUpperCase())),
+    ];
+    servicoResumo = nomesUnicos.join("/");
+    quantidadeResumo = itensAtualizados.reduce(
+      (acc, i) => acc + (Number(i.quantidade) || 0),
+      0,
+    );
+  }
+
   const dadosAtualizacao = {
     status: document.getElementById("editStatus").value,
     nome,
@@ -415,6 +456,8 @@ export async function salvarEdicoes(id) {
     valor: novoValor,
     observacao: novaObs,
     itens_servicos: itensAtualizados,
+    servico: servicoResumo,
+    quantidade: quantidadeResumo,
   };
 
   if (ehConsertoOuSolda(osAtual)) {
@@ -446,6 +489,7 @@ export async function salvarEdicoes(id) {
     fecharModal({ forcar: true });
     carregarResumoDashboard();
     carregarUltimasOS();
+    recarregarListaOS();
   } catch (error) {
     console.error(error);
     toast(mensagemErro(error, "salvar as alterações"), "error");
@@ -537,14 +581,11 @@ if (supabaseClient) {
       "postgres_changes",
       { event: "*", schema: "public", table: "ordens_servico" },
       (payload) => {
-        // Ignora se a mudança foi feita por este mesmo aparelho para não piscar a tela à toa
-        // Mas como não temos o controle exato do client_id aqui, recarregamos de forma silenciosa.
         console.log(
           "Realtime: Mudança detectada na tabela ordens_servico.",
           payload,
         );
 
-        // Se o modal de edição estiver aberto, não atualiza para não fechar na cara do usuário.
         const modalAberto = document
           .getElementById("modalDetalhes")
           ?.classList.contains("show");

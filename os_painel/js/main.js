@@ -17,7 +17,7 @@ import {
   compartilharOS,
   modalAdicionarItem,
   modalRemoverItem,
-  modalEditarValorItem,
+  modalEditarItem,
   modalGerenciarCatalogo,
   modalEditarServicoCatalogo,
   adicionarServicoCatalogo,
@@ -35,6 +35,7 @@ import {
 import { setTouchStartX, setTouchEndX, exibirFaturamento } from "./state.js";
 import { toast } from "./utils.js";
 import { criarDropdownCustom } from "./views/dropdownCustom.js";
+import { obterCatalogoServicos } from "./catalogoStore.js"; // <-- ADICIONADO PARA O FILTRO
 
 /* ---------- DETECÇÃO DE ELECTRON ---------- */
 if (navigator.userAgent.includes("Electron")) {
@@ -89,7 +90,7 @@ Object.assign(window, {
   compartilharOS,
   modalAdicionarItem,
   modalRemoverItem,
-  modalEditarValorItem,
+  modalEditarItem,
   modalGerenciarCatalogo,
   modalEditarServicoCatalogo,
   adicionarServicoCatalogo,
@@ -167,8 +168,12 @@ document.getElementById("searchInput").addEventListener("input", (e) => {
   }
 }
 
+/* ===== FILTROS DE DATA E SERVIÇO ===== */
 const inputDataInicial = document.getElementById("dataInicial");
 const inputDataFinal = document.getElementById("dataFinal");
+const filtroServico = document.getElementById("filtroServico");
+const btnLimparDatas = document.getElementById("btnLimparDatas");
+
 if (inputDataInicial) {
   inputDataInicial.addEventListener("change", (e) => {
     estado.dataInicial = e.target.value;
@@ -181,17 +186,52 @@ if (inputDataFinal) {
     recarregarListaOS();
   });
 }
-const btnLimparDatas = document.getElementById("btnLimparDatas");
-if (btnLimparDatas) {
-  btnLimparDatas.addEventListener("click", () => {
-    estado.dataInicial = "";
-    estado.dataFinal = "";
-    if (inputDataInicial) inputDataInicial.value = "";
-    if (inputDataFinal) inputDataFinal.value = "";
+
+if (filtroServico) {
+  filtroServico.addEventListener("change", (e) => {
+    estado.filtroServico = e.target.value;
     recarregarListaOS();
   });
 }
 
+if (btnLimparDatas) {
+  btnLimparDatas.addEventListener("click", () => {
+    estado.dataInicial = "";
+    estado.dataFinal = "";
+    estado.filtroServico = "all"; // Reseta o serviço
+    if (inputDataInicial) inputDataInicial.value = "";
+    if (inputDataFinal) inputDataFinal.value = "";
+    if (filtroServico) filtroServico.value = "all";
+    recarregarListaOS();
+  });
+}
+
+/* Função para preencher o filtro de serviços dinamicamente do banco */
+async function popularFiltroServicos() {
+  const select = document.getElementById("filtroServico");
+  if (!select) return;
+
+  try {
+    const catalogo = await obterCatalogoServicos();
+    const opcoes = catalogo
+      .map((s) => `<option value="${s.nome}">${s.nome}</option>`)
+      .join("");
+
+    select.innerHTML = `<option value="all">Todos</option>` + opcoes;
+
+    // Restaura o valor selecionado se o usuário recarregar a página
+    if (estado.filtroServico && estado.filtroServico !== "all") {
+      select.value = estado.filtroServico;
+    }
+  } catch (e) {
+    console.error("Erro ao carregar serviços para o filtro", e);
+  }
+}
+
+// Chama a função para preencher a lista do banco
+popularFiltroServicos();
+
+/* ---------- MODAL DE DETALHES E OUTROS EVENTOS ---------- */
 document.getElementById("modalDetalhes").addEventListener("click", (e) => {
   if (e.target.id === "modalDetalhes") fecharModal();
 });
