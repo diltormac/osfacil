@@ -1,9 +1,4 @@
-import {
-  listaOS,
-  estado,
-  temMaisOS,
-  carregandoMaisOS,
-} from "../state.js";
+import { listaOS, estado, temMaisOS, carregandoMaisOS } from "../state.js";
 import {
   esc,
   iniciais,
@@ -100,19 +95,28 @@ export function renderOS() {
       return `
       <tr class="table-row">
         <td class="px-4 py-3.5"><span class="text-xs font-bold text-indigo-600 whitespace-nowrap">${esc(numeroExibicao(o))}</span></td>
+        
         <td class="px-4 py-3.5">
           <div class="flex items-center gap-2.5 min-w-0">
             ${
               foto ||
               `<div class="w-8 h-8 rounded-full bg-slate-100 flex items-center justify-center text-xs font-bold text-slate-600 flex-shrink-0" aria-hidden="true">${iniciais(o.nome)}</div>`
             }
-            <span class="text-sm font-semibold text-slate-800 truncate max-w-[120px] xl:max-w-[180px]" title="${esc(o.nome)}">${esc(o.nome) || '<span class="text-slate-400 italic font-medium">Sem nome</span>'}</span>
+            <span class="text-sm font-semibold text-slate-800 truncate" title="${esc(o.nome)}">${esc(o.nome) || '<span class="text-slate-400 italic font-medium">Sem nome</span>'}</span>
           </div>
         </td>
+        
         <td class="px-4 py-3.5 text-xs text-slate-600 whitespace-nowrap">${esc(o.telefone) || "-"}</td>
-        <td class="px-4 py-3.5 text-xs text-slate-700 font-medium break-words">${esc(o.servico) || "-"}${o.quantidade ? ` <span class="text-slate-400 font-normal">(${esc(o.quantidade)})</span>` : ""}</td>
-        <td class="px-4 py-3.5 text-xs text-slate-700 font-medium">${esc(o.cor) || "-"}</td>
-        <td class="px-4 py-3.5 text-xs text-slate-500 font-medium">${esc(o.aparelho) || "-"}</td>
+        
+        <!-- Coluna de SERVIÇO: text-ellipsis para cortar textos longos e não quebrar a tabela -->
+        <td class="px-4 py-3.5 text-xs text-slate-700 font-medium">
+          <div class="truncate" title="${esc(o.servico)}">
+            ${esc(o.servico) || "-"}${o.quantidade ? ` <span class="text-slate-400 font-normal">(${esc(o.quantidade)})</span>` : ""}
+          </div>
+        </td>
+        
+        <td class="px-4 py-3.5 text-xs text-slate-700 font-medium truncate">${esc(o.cor) || "-"}</td>
+        <td class="px-4 py-3.5 text-xs text-slate-500 font-medium truncate" title="${esc(o.aparelho)}">${esc(o.aparelho) || "-"}</td>
         <td class="px-4 py-3.5 text-xs font-bold text-emerald-600 whitespace-nowrap tabular-nums">${formatarMoeda(o.valor)}</td>
         <td class="px-4 py-3.5">${badge(o.status)}</td>
         <td class="px-4 py-3.5 text-right">

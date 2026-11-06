@@ -8,12 +8,13 @@ import {
   formatarMoeda,
   lerValor,
   toast,
-  confirmarAcao, // <--- IMPORT ADICIONADO AQUI
+  confirmarAcao,
 } from "../utils.js";
 import { fecharCamadaPorId } from "./helpers.js";
 import { compartilharTexto } from "../compartilhamento.js";
 import { criarDropdownCustom } from "./dropdownCustom.js";
 import { supabaseClient } from "../config.js";
+import { abrirRelatorio } from "./relatorio.js";
 
 let fotografiaFormulario = "";
 
@@ -400,11 +401,18 @@ export async function abrirDetalhes(idOuObjeto) {
       ${fotosHTML}
     </div>
 
+    <!-- BOTÕES DE AÇÃO CORRIGIDOS (SEM DUPLICAÇÃO) -->
     <div class="pt-4 border-t border-slate-200 flex flex-col-reverse sm:flex-row sm:justify-between sm:items-center gap-2">
       <button type="button" id="btnExcluirOS" onclick="excluirOS(${os.id})" class="w-full sm:w-auto px-4 py-2.5 bg-red-50 hover:bg-red-100 text-red-600 border border-red-200 rounded-lg text-sm font-bold transition flex items-center justify-center gap-2 disabled:opacity-60 disabled:cursor-not-allowed">
         <i class="fa-solid fa-trash" aria-hidden="true"></i> Excluir
       </button>
+      
       <div class="flex flex-col sm:flex-row gap-2 w-full sm:w-auto">
+        <!-- NOVO BOTÃO DE RELATÓRIO -->
+        <button type="button" onclick="window.abrirRelatorioOS(${os.id})" class="w-full sm:w-auto px-4 py-2.5 bg-slate-800 hover:bg-slate-900 text-white rounded-lg text-sm font-bold transition flex items-center justify-center gap-2 shadow-md">
+          <i class="fa-solid fa-file-invoice" aria-hidden="true"></i> Relatório
+        </button>
+
         <button type="button" id="btnCompartilharOS" onclick="compartilharOS(${os.id})" class="esconder-no-electron w-full sm:w-auto px-4 py-2.5 bg-green-600 hover:bg-green-700 text-white rounded-lg text-sm font-bold transition flex items-center justify-center gap-2 shadow-md disabled:opacity-60 disabled:cursor-not-allowed">
           <i class="fa-solid fa-share-nodes" aria-hidden="true"></i> Compartilhar
         </button>
