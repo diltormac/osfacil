@@ -28,28 +28,32 @@ export async function compartilharTexto({
 
       // Se tem foto, precisamos baixar e salvar no celular
       if (fotoUrl) {
-        // 1. Baixa a imagem da internet
-        const resposta = await fetch(fotoUrl);
-        const blob = await resposta.blob();
+        try {
+          // 1. Baixa a imagem da internet
+          const resposta = await fetch(fotoUrl);
+          const blob = await resposta.blob();
 
-        // 2. Converte para Base64 (necessário para o plugin de arquivos)
-        const base64Data = await new Promise((resolve, reject) => {
-          const reader = new FileReader();
-          reader.onloadend = () => resolve(reader.result.split(",")[1]);
-          reader.onerror = reject;
-          reader.readAsDataURL(blob);
-        });
+          // 2. Converte para Base64 (necessário para o plugin de arquivos)
+          const base64Data = await new Promise((resolve, reject) => {
+            const reader = new FileReader();
+            reader.onloadend = () => resolve(reader.result.split(",")[1]);
+            reader.onerror = reject;
+            reader.readAsDataURL(blob);
+          });
 
-        // 3. Salva no cache do celular
-        const nomeArquivo = `os-foto-${Date.now()}.jpg`;
-        const resultadoArquivo = await Filesystem.writeFile({
-          path: nomeArquivo,
-          data: base64Data,
-          directory: "CACHE", // Usa string para evitar erro de importação
-        });
+          // 3. Salva no cache do celular
+          const nomeArquivo = `os-foto-${Date.now()}.jpg`;
+          const resultadoArquivo = await Filesystem.writeFile({
+            path: nomeArquivo,
+            data: base64Data,
+            directory: "CACHE",
+          });
 
-        // 4. Pega o caminho real do arquivo
-        arquivoParaCompartilhar = resultadoArquivo.uri;
+          // 4. Pega o caminho real do arquivo
+          arquivoParaCompartilhar = resultadoArquivo.uri;
+        } catch (err) {
+          console.warn("Falha ao baixar/salvar a foto para compartilhar.", err);
+        }
       }
 
       // 5. Abre o menu de compartilhamento do Android
