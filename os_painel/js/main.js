@@ -1,4 +1,5 @@
 import { estado } from "./state.js";
+import { abrirRelatorio } from "./views/relatorio.js"; // <-- Adicione
 import {
   carregarDados,
   recarregarListaOS,
@@ -102,6 +103,24 @@ Object.assign(window, {
   carregarMaisOS,
   carregarMaisGaleria,
   mudarView,
+});
+Object.assign(window, {
+  // ... (outras funções que já existem)
+
+  // ADICIONE ESTA LINHA:
+  abrirRelatorioOS: (id) => {
+    // Busca a OS na lista (do estado global)
+    import("./state.js").then(({ listaOS }) => {
+      const os = listaOS.find((o) => o.id === id);
+      if (os) {
+        abrirRelatorio(os);
+      } else {
+        import("./utils.js").then(({ toast }) => {
+          toast("OS não encontrada.", "error");
+        });
+      }
+    });
+  },
 });
 
 /* ---------- EVENTOS ---------- */
