@@ -53,6 +53,19 @@ export async function abrirRelatorio(os) {
   obsLimpa = obsLimpa.replace(/\s*\|\s*COR:[^|]*/g, "");
   obsLimpa = obsLimpa.trim();
 
+  // =========================================================
+  // CÁLCULO DO VALOR TOTAL E UNITÁRIO
+  // =========================================================
+  // O banco de dados envia o valor já multiplicado (Total).
+  // Então, somamos todos os valores para ter o Total Geral.
+  const valorTotalFinal = (os.itens_servicos || []).reduce((soma, item) => {
+    return soma + (Number(item.valor) || 0);
+  }, 0);
+
+  // Fallback: se não houver itens, usa o os.valor
+  const valorExibicaoTotal =
+    valorTotalFinal > 0 ? valorTotalFinal : os.valor || 0;
+
   div.innerHTML = `
     <div class="bg-slate-100 rounded-xl w-full max-w-3xl shadow-2xl overflow-hidden flex flex-col max-h-[95vh] sm:max-h-[90vh]">
       
@@ -140,12 +153,16 @@ export async function abrirRelatorio(os) {
               ${(os.itens_servicos || [])
                 .map((item, index) => {
                   const qtd = item.quantidade || 1;
-                  const valorTotalItem = (item.valor || 0) * qtd;
+                  // AQUI ESTÁ A CORREÇÃO: O item.valor já é o Total.
+                  // Dividimos o Total pela Quantidade para achar o Unitário.
+                  const valorTotalItem = Number(item.valor) || 0;
+                  const valorUnit = valorTotalItem / qtd;
+
                   return `
                 <tr class="${index % 2 === 0 ? "bg-white" : "bg-slate-50/50"}">
                   <td class="py-2.5 px-1.5 sm:py-3 sm:px-3 font-bold text-slate-800 break-words text-[10px] sm:text-sm">${esc(item.servico)}</td>
                   <td class="py-2.5 px-1 sm:py-3 sm:px-3 text-center font-bold text-slate-800 text-[10px] sm:text-sm">${qtd}</td>
-                  <td class="py-2.5 px-1.5 sm:py-3 sm:px-3 text-right font-semibold text-slate-700 whitespace-nowrap text-[10px] sm:text-sm">${formatarMoeda(item.valor)}</td>
+                  <td class="py-2.5 px-1.5 sm:py-3 sm:px-3 text-right font-semibold text-slate-700 whitespace-nowrap text-[10px] sm:text-sm">${formatarMoeda(valorUnit)}</td>
                   <td class="py-2.5 px-1.5 sm:py-3 sm:px-3 text-right font-extrabold text-slate-900 whitespace-nowrap text-[10px] sm:text-sm">${formatarMoeda(valorTotalItem)}</td>
                 </tr>
               `;
@@ -158,7 +175,7 @@ export async function abrirRelatorio(os) {
           <div class="flex justify-end mb-4 sm:mb-6">
             <div class="bg-slate-900 text-white rounded-md p-2.5 sm:p-4 flex items-center justify-between w-full sm:w-72 shadow-md">
               <span class="font-extrabold text-[10px] sm:text-sm uppercase tracking-wider text-slate-300">Valor Total</span>
-              <span class="font-extrabold text-lg sm:text-2xl text-white">${formatarMoeda(os.valor)}</span>
+              <span class="font-extrabold text-lg sm:text-2xl text-white">${formatarMoeda(valorExibicaoTotal)}</span>
             </div>
           </div>
 
@@ -214,11 +231,11 @@ export async function abrirRelatorio(os) {
     try {
       const elemento = document.getElementById("relatorioCaptura");
       const estiloOriginal = elemento.getAttribute("style");
-      
+
       // Força o tamanho A4 para o PDF não sair cortado e evita folhas em branco
       elemento.style.width = "210mm";
-      elemento.style.padding = "10mm 15mm"; 
-      
+      elemento.style.padding = "10mm 15mm";
+
       const nomeArquivo = `OS-${numeroExibicao(os).replace(/[^\w-]/g, "_")}.pdf`;
 
       const opt = {
@@ -254,7 +271,7 @@ export async function abrirRelatorio(os) {
           titulo: `Relatório OS ${numeroExibicao(os)}`,
           texto: `Segue o relatório em PDF da sua OS: ${numeroExibicao(os)}`,
           fotoUrl: objectUrl,
-          isPdf: true, 
+          isPdf: true,
         });
 
         URL.revokeObjectURL(objectUrl);
