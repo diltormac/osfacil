@@ -46,6 +46,7 @@ function normalizarOS(item) {
     telefone: item.telefone || "",
     servico: item.servico || "",
     cor: item.cor || "",
+    placa: item.placa || "", // <-- ADICIONADO PARA NORMALIZAR A PLACA
     fotos_urls: Array.isArray(item.fotos_urls)
       ? item.fotos_urls.filter(Boolean)
       : [],
@@ -74,28 +75,35 @@ function montarConsultaOS({
 
   const termo = estado.busca.trim();
   if (termo) {
-    // Normaliza o texto (tira acentos e deixa minúsculo) para buscar no banco
     const q = normalizar(termo);
-    // Extrai apenas os números (para busca de telefone)
     const qDigitos = q.replace(/\D/g, "");
 
-    // Prepara a lista de condições (OR)
+    // Verifica se o que foi digitado é um número (para buscar pelo ID)
+    const isNumero = /^\d+$/.test(qDigitos);
+
     const partes = [];
 
-    // 1. Condição de Texto: Busca nomes, serviços, observações, etc.
-    // Remove caracteres que o PostgREST do Supabase usa para separar comandos
+    // 1. Busca por texto (nome, serviço, cor, observação)
     const textoSeguro = q.replace(/[%,()]/g, "").trim();
     if (textoSeguro) {
       partes.push(`busca_normalizada.ilike.%${textoSeguro}%`);
     }
 
-    // 2. Condição de Telefone: Só tenta buscar se tiver números suficientes
+    // 2. Busca por Telefone (se tiver números suficientes)
     if (qDigitos.length >= 3) {
-      // Tenta achar a sequência de números no telefone
       partes.push(`telefone.ilike.%${qDigitos}%`);
     }
 
-    // Aplica a busca combinada (se houver alguma parte válida)
+    // 3. Busca por Placa (texto exato ou parcial)
+    if (textoSeguro) {
+      partes.push(`placa.ilike.%${textoSeguro}%`);
+    }
+
+    // 4. Busca por ID (se o termo for um número)
+    if (isNumero) {
+      partes.push(`id.eq.${qDigitos}`);
+    }
+
     if (partes.length > 0) {
       consulta = consulta.or(partes.join(","));
     }
@@ -396,9 +404,15 @@ export async function salvarEdicoes(id) {
 
   const nome = document.getElementById("editNome").value.trim().toUpperCase();
   const telefone = document.getElementById("editTelefone").value.trim();
+
+  // CAPTURA A COR E A PLACA
   const cor = (document.getElementById("editCor")?.value || "")
     .trim()
     .toUpperCase();
+  const placa = (document.getElementById("editPlaca")?.value || "")
+    .trim()
+    .toUpperCase(); // <-- CAPTURA A PLACA AQUI
+
   const novoValor = lerValor(document.getElementById("editValor").value);
   const novaObs = document
     .getElementById("editObservacao")
@@ -423,14 +437,29 @@ export async function salvarEdicoes(id) {
       "O valor total não pode ser negativo.",
     );
 
-  // 1. Atualiza a cor dos itens de reforma e prepara a lista final
+  // 1. Atualiza a cor dos itens de reforma E a placa dos itens de alinhamento
   const itensAtualizados = itensRascunho.map((item) => {
     const nomeItem = String(item.servico || "").toUpperCase();
+    let novoItem = { ...item };
+
     if (nomeItem.includes("REFORMA")) {
-      return { ...item, cor: cor };
+      novoItem.cor = cor;
     } else {
-      return { ...item, cor: "" };
+      novoItem.cor = "";
     }
+
+    // Se o serviço for de alinhamento, atualiza a placa
+    if (
+      nomeItem.includes("ALINHAMENTO") ||
+      nomeItem.includes("CAMBER") ||
+      nomeItem.includes("CASTER")
+    ) {
+      novoItem.placa = placa;
+    } else {
+      novoItem.placa = null;
+    }
+
+    return novoItem;
   });
 
   // 2. Recalcula o campo "servico" e "quantidade" para a tabela principal
@@ -453,6 +482,7 @@ export async function salvarEdicoes(id) {
     nome,
     telefone,
     cor,
+    placa: placa || null, // <-- SALVA A PLACA NA COLUNA PRINCIPAL AQUI
     valor: novoValor,
     observacao: novaObs,
     itens_servicos: itensAtualizados,

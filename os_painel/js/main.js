@@ -1,5 +1,5 @@
 import { estado } from "./state.js";
-import { abrirRelatorio } from "./views/relatorio.js"; // <-- Adicione
+import { abrirRelatorio } from "./views/relatorio.js";
 import {
   carregarDados,
   recarregarListaOS,
@@ -23,7 +23,6 @@ import {
   modalEditarServicoCatalogo,
   adicionarServicoCatalogo,
   removerServicoCatalogo,
-  renderOS,
   copiarCampo,
   salvarEdicoes,
   excluirOS,
@@ -36,7 +35,7 @@ import {
 import { setTouchStartX, setTouchEndX, exibirFaturamento } from "./state.js";
 import { toast } from "./utils.js";
 import { criarDropdownCustom } from "./views/dropdownCustom.js";
-import { obterCatalogoServicos } from "./catalogoStore.js"; // <-- ADICIONADO PARA O FILTRO
+import { obterCatalogoServicos } from "./catalogoStore.js";
 
 /* ---------- DETECÇÃO DE ELECTRON ---------- */
 if (navigator.userAgent.includes("Electron")) {
@@ -104,12 +103,9 @@ Object.assign(window, {
   carregarMaisGaleria,
   mudarView,
 });
-Object.assign(window, {
-  // ... (outras funções que já existem)
 
-  // ADICIONE ESTA LINHA:
+Object.assign(window, {
   abrirRelatorioOS: (id) => {
-    // Busca a OS na lista (do estado global)
     import("./state.js").then(({ listaOS }) => {
       const os = listaOS.find((o) => o.id === id);
       if (os) {
@@ -162,7 +158,7 @@ document.getElementById("searchInput").addEventListener("input", (e) => {
   timeoutBusca = setTimeout(() => recarregarListaOS(), 350);
 });
 
-/* ===== sortSelect: agora é dropdown customizado ===== */
+/* ===== sortSelect: dropdown customizado ===== */
 {
   const container = document.getElementById("sortSelect");
   if (container) {
@@ -190,65 +186,80 @@ document.getElementById("searchInput").addEventListener("input", (e) => {
 /* ===== FILTROS DE DATA E SERVIÇO ===== */
 const inputDataInicial = document.getElementById("dataInicial");
 const inputDataFinal = document.getElementById("dataFinal");
-const filtroServico = document.getElementById("filtroServico");
+const containerFiltroServico = document.getElementById("filtroServico");
 const btnLimparDatas = document.getElementById("btnLimparDatas");
 
-if (inputDataInicial) {
-  inputDataInicial.addEventListener("change", (e) => {
-    estado.dataInicial = e.target.value;
-    recarregarListaOS();
-  });
-}
-if (inputDataFinal) {
-  inputDataFinal.addEventListener("change", (e) => {
-    estado.dataFinal = e.target.value;
-    recarregarListaOS();
-  });
+// 1. Inicializa o Calendário Customizado (Flatpickr)
+if (inputDataInicial && inputDataFinal) {
+  const configCalendario = {
+    locale: "pt",
+    dateFormat: "Y-m-d",
+    altInput: true,
+    altFormat: "d/m/Y",
+    allowInput: false,
+    disableMobile: true,
+    onChange: function (selectedDates, dateStr, instance) {
+      if (instance.element.id === "dataInicial") estado.dataInicial = dateStr;
+      if (instance.element.id === "dataFinal") estado.dataFinal = dateStr;
+      recarregarListaOS();
+    },
+  };
+
+  flatpickr(inputDataInicial, configCalendario);
+  flatpickr(inputDataFinal, configCalendario);
 }
 
-if (filtroServico) {
-  filtroServico.addEventListener("change", (e) => {
-    estado.filtroServico = e.target.value;
-    recarregarListaOS();
-  });
-}
-
-if (btnLimparDatas) {
-  btnLimparDatas.addEventListener("click", () => {
-    estado.dataInicial = "";
-    estado.dataFinal = "";
-    estado.filtroServico = "all"; // Reseta o serviço
-    if (inputDataInicial) inputDataInicial.value = "";
-    if (inputDataFinal) inputDataFinal.value = "";
-    if (filtroServico) filtroServico.value = "all";
-    recarregarListaOS();
-  });
-}
-
-/* Função para preencher o filtro de serviços dinamicamente do banco */
+// 2. Substitui o <select> nativo por um dropdown customizado
 async function popularFiltroServicos() {
-  const select = document.getElementById("filtroServico");
-  if (!select) return;
+  if (!containerFiltroServico) return;
 
   try {
     const catalogo = await obterCatalogoServicos();
-    const opcoes = catalogo
-      .map((s) => `<option value="${s.nome}">${s.nome}</option>`)
-      .join("");
 
-    select.innerHTML = `<option value="all">Todos</option>` + opcoes;
+    const options = [
+      { value: "all", text: "Todos os Serviços" },
+      ...catalogo.map((s) => ({ value: s.nome, text: s.nome })),
+    ];
 
-    // Restaura o valor selecionado se o usuário recarregar a página
-    if (estado.filtroServico && estado.filtroServico !== "all") {
-      select.value = estado.filtroServico;
-    }
+    const dropdownCustom = criarDropdownCustom({
+      id: "filtroServicoSelect",
+      name: "filtroServico",
+      value: estado.filtroServico || "all",
+      options: options,
+      className: "h-[34px] text-xs",
+    });
+
+    containerFiltroServico.replaceWith(dropdownCustom);
+
+    dropdownCustom.addEventListener("change", () => {
+      estado.filtroServico = dropdownCustom.value;
+      recarregarListaOS();
+    });
   } catch (e) {
     console.error("Erro ao carregar serviços para o filtro", e);
   }
 }
 
-// Chama a função para preencher a lista do banco
 popularFiltroServicos();
+
+// 3. Botão de limpar filtros (ajustado para Flatpickr e Dropdown custom)
+if (btnLimparDatas) {
+  btnLimparDatas.addEventListener("click", () => {
+    estado.dataInicial = "";
+    estado.dataFinal = "";
+    estado.filtroServico = "all";
+
+    if (inputDataInicial && inputDataInicial._flatpickr)
+      inputDataInicial._flatpickr.clear();
+    if (inputDataFinal && inputDataFinal._flatpickr)
+      inputDataFinal._flatpickr.clear();
+
+    const selectCustom = document.getElementById("filtroServicoSelect");
+    if (selectCustom) selectCustom.value = "all";
+
+    recarregarListaOS();
+  });
+}
 
 /* ---------- MODAL DE DETALHES E OUTROS EVENTOS ---------- */
 document.getElementById("modalDetalhes").addEventListener("click", (e) => {
@@ -338,6 +349,11 @@ if (exibirFaturamento) {
     Number(sessionStorage.getItem("@osfacil_faturamento")),
   );
 }
+
+/* ---- ESCUTA O EVENTO DO COMPARTILHAMENTO (Substitui o prompt nativo) ---- */
+window.addEventListener("osfacil_toast", (e) => {
+  toast(e.detail.mensagem, e.detail.tipo);
+});
 
 atualizarTudo(); // mostra "Carregando…" enquanto a consulta não volta
 carregarDados();

@@ -1,15 +1,10 @@
-/**
- * Compartilha um texto e/ou uma imagem real (baixando o arquivo).
- * Usa o objeto global window.Capacitor para evitar erros de módulo no navegador.
- */
 export async function compartilharTexto({
   titulo = "",
   texto = "",
   fotoUrl = "",
+  isPdf = false, // <-- NOVO PARÂMETRO
 } = {}) {
   const conteudo = String(texto ?? "");
-
-  // Verifica se está rodando no APK (Capacitor)
   const ehNativo = window.Capacitor?.isNativePlatform?.() || false;
 
   // ==========================================
@@ -26,14 +21,21 @@ export async function compartilharTexto({
 
       let arquivoParaCompartilhar = null;
 
-      // Se tem foto, precisamos baixar e salvar no celular
       if (fotoUrl) {
         try {
-          // 1. Baixa a imagem da internet
-          const resposta = await fetch(fotoUrl);
-          const blob = await resposta.blob();
+          let blob;
 
-          // 2. Converte para Base64 (necessário para o plugin de arquivos)
+          // Se for um Blob (URL.createObjectURL), baixa ele
+          if (fotoUrl.startsWith("blob:") || fotoUrl.startsWith("data:")) {
+            const resposta = await fetch(fotoUrl);
+            blob = await resposta.blob();
+          } else {
+            // Se for link da internet
+            const resposta = await fetch(fotoUrl);
+            blob = await resposta.blob();
+          }
+
+          // Converte para Base64
           const base64Data = await new Promise((resolve, reject) => {
             const reader = new FileReader();
             reader.onloadend = () => resolve(reader.result.split(",")[1]);
@@ -41,26 +43,28 @@ export async function compartilharTexto({
             reader.readAsDataURL(blob);
           });
 
-          // 3. Salva no cache do celular
-          const nomeArquivo = `os-foto-${Date.now()}.jpg`;
+          // Define nome e extensão corretos
+          const extensao = isPdf ? "pdf" : "jpg";
+          const nomeArquivo = `os-relatorio-${Date.now()}.${extensao}`;
+
+          // Salva no cache do celular
           const resultadoArquivo = await Filesystem.writeFile({
             path: nomeArquivo,
             data: base64Data,
             directory: "CACHE",
           });
 
-          // 4. Pega o caminho real do arquivo
-          arquivoParaCompartilhar = resultadoArquivo.uri;
+          arquivoParaCompartilhar = resultadoArquivo.uri; // Pega o caminho file://
         } catch (err) {
-          console.warn("Falha ao baixar/salvar a foto para compartilhar.", err);
+          console.warn("Falha ao salvar o arquivo para compartilhar.", err);
         }
       }
 
-      // 5. Abre o menu de compartilhamento do Android
+      // Envia o arquivo salvo (ou apenas o texto se falhar)
       await Share.share({
         title: titulo,
         text: conteudo,
-        url: arquivoParaCompartilhar || fotoUrl || undefined,
+        url: arquivoParaCompartilhar || undefined, // Passa o caminho file://
         dialogTitle: "Compartilhar OS",
       });
 
@@ -69,12 +73,12 @@ export async function compartilharTexto({
       if (e && e.message && e.message.toLowerCase().includes("cancel")) {
         return { status: "cancelado" };
       }
-      console.warn("Compartilhamento nativo falhou, tentando clipboard.", e);
+      console.warn("Compartilhamento nativo falhou.", e);
     }
   }
 
   // ==========================================
-  // 2. NAVEGADOR WEB (navigator.share)
+  // 2. NAVEGADOR WEB (Chrome, Edge, Safari)
   // ==========================================
   if (
     !ehNativo &&
@@ -86,10 +90,12 @@ export async function compartilharTexto({
       try {
         const resposta = await fetch(fotoUrl, { mode: "cors" });
         const blob = await resposta.blob();
-        arquivo = new File([blob], "os.jpg", { type: blob.type });
+        const ext = isPdf ? "pdf" : "jpg";
+        const type = isPdf ? "application/pdf" : blob.type;
+        arquivo = new File([blob], `os.${ext}`, { type });
       } catch (err) {
         console.warn(
-          "Não foi possível baixar a foto para compartilhar na web.",
+          "Não foi possível baixar o arquivo para compartilhar na web.",
           err,
         );
       }
@@ -133,18 +139,6 @@ export async function compartilharTexto({
     } catch (e) {
       console.warn("Não foi possível copiar para a área de transferência.", e);
     }
-  }
-
-  // ==========================================
-  // 4. ÚLTIMO RECURSO: PROMPT MANUAL
-  // ==========================================
-  try {
-    if (typeof window !== "undefined" && typeof window.prompt === "function") {
-      window.prompt("Copie o texto abaixo:", conteudo);
-      return { status: "manual" };
-    }
-  } catch (e) {
-    console.error("Falha ao exibir o texto para cópia manual.", e);
   }
 
   return { status: "erro" };

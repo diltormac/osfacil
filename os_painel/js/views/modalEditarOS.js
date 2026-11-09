@@ -47,6 +47,7 @@ function itemHTML(item, idx) {
           ${esc(item.servico) || "Serviço sem nome"}
         </span>
         ${item.cor ? `<span class="text-[10px] text-indigo-600 font-medium truncate block mt-0.5">Cor: ${esc(item.cor)}</span>` : ""}
+        ${item.placa ? `<span class="text-[10px] text-emerald-600 font-medium truncate block mt-0.5">Placa: ${esc(item.placa)}</span>` : ""}
       </div>
       
       <!-- Quantidade -->
@@ -241,6 +242,7 @@ function lerFormulario() {
     "editNome",
     "editTelefone",
     "editCor",
+    "editPlaca", // <-- ADICIONADO AQUI
     "editValor",
     "editObservacao",
   ];
@@ -366,9 +368,23 @@ export async function abrirDetalhes(idOuObjeto) {
       </div>
     </div>
 
-    <div>
-      <label for="editCor" class="text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1 block">Cor</label>
-      <input type="text" id="editCor" maxlength="50" value="${esc(os.cor || "")}" class="edit-input" />
+    <!-- CAMPOS DE COR E PLACA -->
+    <div class="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
+      <div>
+        <label for="editCor" class="text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1 block">Cor</label>
+        <input type="text" id="editCor" maxlength="50" value="${esc(os.cor || "")}" class="edit-input" />
+      </div>
+      
+      <!-- NOVO CAMPO DE PLACA -->
+      <div>
+        <label for="editPlaca" class="text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1 block">Placa</label>
+        <div class="relative flex items-center">
+          <input type="text" id="editPlaca" maxlength="8" value="${esc(os.placa || "")}" class="edit-input pr-10" placeholder="Ex: ABC1D23" />
+          <button type="button" onclick="copiarCampo('editPlaca')" class="absolute right-2 text-slate-400 hover:text-indigo-600 p-1" title="Copiar Placa" aria-label="Copiar placa">
+            <i class="fa-solid fa-copy text-sm" aria-hidden="true"></i>
+          </button>
+        </div>
+      </div>
     </div>
 
     <div>
@@ -448,15 +464,21 @@ export async function abrirDetalhes(idOuObjeto) {
   document.getElementById("editStatus").focus();
 }
 
-export function fecharModal({ forcar = false } = {}) {
+export async function fecharModal({ forcar = false } = {}) {
   if (!forcar && formularioAlterado()) {
-    if (!confirm("Há alterações não salvas nesta OS. Fechar e descartar?"))
-      return;
+    const continuar = await confirmarAcao({
+      titulo: "Descartar alterações?",
+      mensagem: "Há alterações não salvas nesta OS. Deseja fechar e descartar?",
+      textoBotao: "Sim, Descartar",
+      icone: "fa-triangle-exclamation",
+      cor: "red",
+    });
+    if (!continuar) return;
   }
   document.getElementById("modalDetalhes").classList.remove("show");
-  fotografiaFormulario = "";
-  setItensRascunho([]);
   fecharCamadaPorId("modalSeletorServico");
+  setItensRascunho([]);
+  fotografiaFormulario = "";
 }
 
 export async function compartilharOS(osId) {
@@ -467,8 +489,30 @@ export async function compartilharOS(osId) {
   }
 
   const linhas = [];
+
+  // 1. Cliente
   if (os.nome) linhas.push(`Cliente: ${os.nome}`);
-  if (os.observacao) linhas.push(`Observações: ${os.observacao}`);
+
+  // 2. Placa (embaixo do nome do cliente, como você pediu)
+  if (os.placa) linhas.push(`Placa: ${os.placa}`);
+
+  // 3. Cor (se houver)
+  if (os.cor) linhas.push(`Cor: ${os.cor}`);
+
+  // 4. Observações (Limpando a placa e cor do texto para não duplicar)
+  if (os.observacao) {
+    let obsLimpa = os.observacao;
+
+    // Remove a placa e cor do texto da observação (se existirem)
+    // Ex: Remove " | PLACA: ABC1234 | COR: PRETO"
+    obsLimpa = obsLimpa.replace(/\s*\|\s*PLACA:[^|]*/g, "");
+    obsLimpa = obsLimpa.replace(/\s*\|\s*COR:[^|]*/g, "");
+
+    // Remove espaços extras que possam ter sobrado
+    obsLimpa = obsLimpa.trim();
+
+    if (obsLimpa) linhas.push(`\nObservações: ${obsLimpa}`);
+  }
 
   const texto = linhas.join("\n");
   const titulo = `OS ${numeroExibicao(os)}`;

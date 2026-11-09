@@ -143,6 +143,7 @@ input[type="password"] {
   box-shadow: 0 0 0 3px rgba(67, 94, 219, 0.12);
 }
 
+/* ---------- BOTÕES DE FILTRO ---------- */
 .filter-btn {
   padding: 6px 14px;
   border-radius: 8px;
@@ -421,4 +422,34 @@ button:disabled {
 :focus-visible {
   outline: 2px solid #435edb;
   outline-offset: 2px;
+}
+
+/* ---------- REMOVER SETINHAS DOS INPUTS NUMBER ---------- */
+input[type="number"]::-webkit-outer-spin-button,
+input[type="number"]::-webkit-inner-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+input[type="number"] {
+  -moz-appearance: textfield;
+  appearance: textfield;
+}
+
+/* ---------- ESTILO DO CALENDÁRIO CUSTOMIZADO (FLATPICKR) ---------- */
+.flatpickr-day.selected,
+.flatpickr-day.startRange,
+.flatpickr-day.endRange,
+.flatpickr-day.selected.inRange,
+.flatpickr-day.selected:focus,
+.flatpickr-day.selected:hover,
+.flatpickr-day.selected.prevMonthDay,
+.flatpickr-day.selected.nextMonthDay {
+  background: #435edb !important;
+  border-color: #435edb !important;
+}
+.flatpickr-calendar {
+  border-radius: 12px;
+  box-shadow: 0 10px 25px rgba(0, 0, 0, 0.1) !important;
+  border: 1px solid #e6eaf0 !important;
+  font-family: "Inter", sans-serif;
 }

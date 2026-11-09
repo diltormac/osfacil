@@ -1,4 +1,11 @@
-import { esc, formatarMoeda, lerValor, normalizar, toast } from "../utils.js";
+import {
+  esc,
+  formatarMoeda,
+  lerValor,
+  normalizar,
+  toast,
+  confirmarAcao,
+} from "../utils.js";
 import {
   obterCatalogoServicos,
   salvarCatalogoServicos,
@@ -203,7 +210,17 @@ export async function removerServicoCatalogo(index) {
   const catalogo = await obterCatalogoServicos();
   const item = catalogo[index];
   if (!item) return;
-  if (!confirm(`Remover “${item.nome}” da lista de serviços?`)) return;
+
+  const continuar = await confirmarAcao({
+    titulo: "Remover Serviço",
+    mensagem: `Remover “${item.nome}” da lista de serviços?`,
+    textoBotao: "Sim, Remover",
+    icone: "fa-trash-can",
+    cor: "red",
+  });
+
+  if (!continuar) return;
+
   catalogo.splice(index, 1);
   if (!(await salvarCatalogoServicos(catalogo))) return;
 

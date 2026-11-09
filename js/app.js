@@ -24,8 +24,12 @@ let isSaving = false;
 let nomeAparelho = localStorage.getItem("@osfacil_aparelho");
 
 let corReforma = "";
+let placaVeiculo = "";
 let numeroOSReforma = "";
 let numeroOSConserto = "";
+
+// Variável para armazenar a placa opcional avulsa
+let placaAvulsa = "";
 
 let itensOS = [];
 let opcoesServico = [];
@@ -133,22 +137,93 @@ const modalSelectServicoContainer =
 const modalGrupoCor = document.getElementById("modalGrupoCor");
 const modalInputCor = document.getElementById("modalInputCor");
 const modalGrupoNumero = document.getElementById("modalGrupoNumero");
+const modalGrupoPlaca = document.getElementById("modalGrupoPlaca");
+const modalInputPlaca = document.getElementById("modalInputPlaca");
 const modalInputNumero = document.getElementById("modalInputNumero");
 const modalInputQtd = document.getElementById("modalInputQtd");
 const modalInputValor = document.getElementById("modalInputValor");
+
+/* =========================================================
+   MODAL DE PLACA OPCIONAL
+   ========================================================= */
+const btnAdicionarPlaca = document.getElementById("btnAdicionarPlaca");
+const modalPlacaOpcional = document.getElementById("modalPlacaOpcional");
+const inputPlacaOpcional = document.getElementById("inputPlacaOpcional");
+const btnSalvarPlacaOpcional = document.getElementById(
+  "btnSalvarPlacaOpcional",
+);
+const btnFecharModalPlaca = document.getElementById("btnFecharModalPlaca");
+
+/* =========================================================
+   LÓGICA CENTRALIZADA DE PLACA (SINCRONIZAÇÃO)
+   ========================================================= */
+function obterPlacaAtual() {
+  // Retorna a placa do item (se houver) ou a placa avulsa
+  return itensOS.find((i) => i.placa)?.placa || placaAvulsa || "";
+}
+
+function atualizarBotaoPlaca() {
+  const placa = obterPlacaAtual();
+
+  if (placa) {
+    btnAdicionarPlaca.innerHTML = `<i class="fa-solid fa-car"></i> ${placa}`;
+    btnAdicionarPlaca.classList.remove("bg-slate-200", "text-slate-700");
+    btnAdicionarPlaca.classList.add(
+      "bg-green-100",
+      "text-green-700",
+      "border",
+      "border-green-300",
+    );
+  } else {
+    btnAdicionarPlaca.innerHTML = `<i class="fa-solid fa-car"></i> Placa`;
+    btnAdicionarPlaca.classList.add("bg-slate-200", "text-slate-700");
+    btnAdicionarPlaca.classList.remove(
+      "bg-green-100",
+      "text-green-700",
+      "border",
+      "border-green-300",
+    );
+  }
+}
+
+btnAdicionarPlaca.onclick = () => {
+  // Puxa a placa atual para o input (seja ela de um serviço ou avulsa)
+  inputPlacaOpcional.value = obterPlacaAtual();
+  modalPlacaOpcional.classList.add("show");
+  setTimeout(() => inputPlacaOpcional.focus(), 150);
+};
+
+btnFecharModalPlaca.onclick = () => {
+  modalPlacaOpcional.classList.remove("show");
+};
+
+btnSalvarPlacaOpcional.onclick = () => {
+  const placaDigitada = inputPlacaOpcional.value.trim().toUpperCase();
+  placaAvulsa = placaDigitada;
+
+  // Se o usuário alterou a placa avulsa, atualiza também todos os itens que já tinham placa
+  // (garantindo consistência visual)
+  itensOS.forEach((item) => {
+    if (item.placa) {
+      item.placa = placaAvulsa;
+    }
+  });
+
+  renderizarItensOS(); // Redesenha a lista caso as placas dos itens tenham mudado
+  atualizarBotaoPlaca(); // Atualiza o botão principal
+  modalPlacaOpcional.classList.remove("show");
+  atualizarProgresso();
+};
 
 /* =========================================================
    DROPDOWN CUSTOMIZADO DE SERVIÇO
    ========================================================= */
 function montarOpcoesDropdownServico() {
   return opcoesServico.map((item) => {
-    // Converte o valor para número (se for vazio, nulo ou texto inválido, vira 0)
     const valorNumerico = Number(item.valor) || 0;
-
     return {
       value: item.nome,
       text: item.nome,
-      // Se o valor for maior que 0, formata normal. Se for 0, força o "R$ 0,00"
       extra: valorNumerico > 0 ? formatarValorInput(valorNumerico) : "R$ 0,00",
     };
   });
@@ -176,7 +251,6 @@ function criarDropdownServicoSeNecessario() {
   }
 }
 
-// Função que calcula o valor (Unitário x Qtd)
 function atualizarValorTotalModal() {
   const qtd = parseInt(modalInputQtd.value) || 1;
   if (valorUnitarioAtual > 0) {
@@ -195,14 +269,30 @@ async function aoSelecionarServico(servNome) {
 
   modalGrupoCor.classList.add("hidden");
   modalGrupoNumero.classList.add("hidden");
+  modalGrupoPlaca.classList.add("hidden");
 
   const itemCat = opcoesServico.find((i) => i.nome === servNome);
-
-  // Guarda o valor UNITÁRIO para multiplicar pela quantidade
   valorUnitarioAtual = itemCat ? itemCat.valor : 0;
   atualizarValorTotalModal();
 
-  if (servUpper === "REFORMA") {
+  if (
+    servUpper.includes("ALINHAMENTO") ||
+    servUpper.includes("CAMBER") ||
+    servUpper.includes("CASTER")
+  ) {
+    modalGrupoPlaca.classList.remove("hidden");
+
+    // Puxa a placa já existente (seja de item anterior ou do botão avulso)
+    const placaExistente = obterPlacaAtual();
+
+    if (placaExistente) {
+      modalInputPlaca.value = placaExistente;
+      // Não foca se já tem placa
+    } else {
+      modalInputPlaca.value = "";
+      setTimeout(() => modalInputPlaca.focus(), 150);
+    }
+  } else if (servUpper === "REFORMA") {
     modalGrupoCor.classList.remove("hidden");
     modalGrupoNumero.classList.remove("hidden");
     modalInputCor.value = corReforma || "";
@@ -228,7 +318,6 @@ async function aoSelecionarServico(servNome) {
   }
 }
 
-// Máscara de valor no modal
 modalInputValor.addEventListener("input", (e) => {
   if (ignorarMascaraValor) return;
 
@@ -239,27 +328,26 @@ modalInputValor.addEventListener("input", (e) => {
   v = v.replace(/(\d)(\d{3}),/g, "$1.$2,");
   e.target.value = "R$ " + v;
 
-  // Se o usuário digitar manualmente, atualiza o valor unitário
   const qtd = parseInt(modalInputQtd.value) || 1;
   const total = parseFloat(v.replace(/\./g, "").replace(",", ".")) || 0;
   valorUnitarioAtual = total / qtd;
 });
 
-// Escuta a mudança de quantidade para multiplicar
 modalInputQtd.addEventListener("input", atualizarValorTotalModal);
 
 btnAdicionarItem.onclick = () => {
   criarDropdownServicoSeNecessario();
   if (dropdownServico) dropdownServico.value = "";
 
-  // Limpa os campos
   modalInputQtd.value = "1";
   modalInputValor.value = "";
   valorUnitarioAtual = 0;
   modalInputCor.value = "";
   modalInputNumero.value = "";
+  modalInputPlaca.value = "";
   modalGrupoCor.classList.add("hidden");
   modalGrupoNumero.classList.add("hidden");
+  modalGrupoPlaca.classList.add("hidden");
 
   corReforma = "";
   numeroOSReforma = "";
@@ -270,7 +358,6 @@ btnAdicionarItem.onclick = () => {
 
 document.getElementById("btnFecharModalAdicionar").onclick = () => {
   modalAdicionar.classList.remove("show");
-  // Adicione esta verificação para fechar a lista caso ela esteja aberta
   if (dropdownServico && dropdownServico.fechar) {
     dropdownServico.fechar();
   }
@@ -373,31 +460,45 @@ document.getElementById("btnConfirmarItem").onclick = () => {
     servUpper === "CONSERTO" ||
     servUpper === "SOLDA" ||
     servUpper === "CONSERTO/SOLDA";
+  const isAlinhamento =
+    servUpper.includes("ALINHAMENTO") ||
+    servUpper.includes("CAMBER") ||
+    servUpper.includes("CASTER");
 
-  if (isReforma && !modalInputCor.value.trim()) {
-    mostrarToast("Por favor, digite a cor.", "erro");
-    modalInputCor.focus();
+  if (isAlinhamento && !modalInputPlaca.value.trim() && !placaAvulsa) {
+    mostrarToast("Por favor, digite a placa do veículo.", "erro");
+    modalInputPlaca.focus();
     return;
   }
 
-  if ((isReforma || isConsertoOuSolda) && !modalInputNumero.value.trim()) {
-    mostrarToast("Por favor, digite o número da OS.", "erro");
-    modalInputNumero.focus();
-    return;
-  }
+  if (isAlinhamento) {
+    // Se digitou algo no input, usa. Se estava vazio mas tinha placa avulsa, usa a avulsa.
+    placaVeiculo =
+      modalInputPlaca.value.trim().toUpperCase() || placaAvulsa || "";
 
-  if (isReforma) {
+    // Sincroniza a placa avulsa se foi digitada aqui pela primeira vez
+    if (placaVeiculo && !placaAvulsa) {
+      placaAvulsa = placaVeiculo;
+    }
+
+    corReforma = "";
+    numeroOSReforma = "";
+    numeroOSConserto = "";
+  } else if (isReforma) {
     corReforma = modalInputCor.value.trim().toUpperCase();
     numeroOSReforma = modalInputNumero.value.trim();
     numeroOSConserto = "";
+    placaVeiculo = "";
   } else if (isConsertoOuSolda) {
     numeroOSConserto = modalInputNumero.value.trim();
     corReforma = "";
     numeroOSReforma = "";
+    placaVeiculo = "";
   } else {
     corReforma = "";
     numeroOSReforma = "";
     numeroOSConserto = "";
+    placaVeiculo = "";
   }
 
   itensOS.push({
@@ -407,9 +508,11 @@ document.getElementById("btnConfirmarItem").onclick = () => {
     cor: corReforma || null,
     numero_os: numeroOSReforma || null,
     numero_os_conserto: numeroOSConserto || null,
+    placa: placaVeiculo || null,
   });
 
   renderizarItensOS();
+  atualizarBotaoPlaca(); // Sincroniza o visual do botão caso o alinhamento tenha definido uma placa
   atualizarProgresso();
   modalAdicionar.classList.remove("show");
 };
@@ -431,6 +534,7 @@ function renderizarItensOS() {
         <span class="font-bold text-slate-800">${item.servico} (Qtd: ${item.quantidade})</span>
         <span class="text-slate-500">R$ ${item.valor.toFixed(2).replace(".", ",")}</span>
         ${item.cor ? `<span class="text-indigo-600 font-medium">Cor: ${item.cor}</span>` : ""}
+        ${item.placa ? `<span class="text-indigo-600 font-medium">Placa: ${item.placa}</span>` : ""}
         ${item.numero_os ? `<span class="text-indigo-600 font-medium">Nº OS: ${item.numero_os}</span>` : ""}
         ${item.numero_os_conserto ? `<span class="text-indigo-600 font-medium">Nº OS Conserto: ${item.numero_os_conserto}</span>` : ""}
       </div>
@@ -444,7 +548,21 @@ function renderizarItensOS() {
 
 window.removerItemOS = function (index) {
   itensOS.splice(index, 1);
+
+  // Se o item removido era o único que segurava a placa, verificamos se precisamos limpar
+  if (itensOS.length === 0) {
+    // Se a lista ficou vazia, a placa avulsa continua (pois ela é independente)
+    // mas o botão precisa ser atualizado para refletir a verdade atual
+  } else {
+    const temPlacaAlgumItem = itensOS.some((i) => i.placa);
+    if (!temPlacaAlgumItem && !placaAvulsa) {
+      // Se nenhum item tem placa e não tem avulsa, limpa tudo
+      placaAvulsa = "";
+    }
+  }
+
   renderizarItensOS();
+  atualizarBotaoPlaca();
   atualizarProgresso();
 };
 
@@ -748,11 +866,25 @@ form.addEventListener("submit", async (event) => {
     .toUpperCase();
   const textoDigitado = observacao.value.trim().toUpperCase();
 
+  const placaGeral = itensOS.find((i) => i.placa)?.placa || placaAvulsa;
+  const corGeral = itensOS.find((i) => i.cor)?.cor;
+
   let observacaoFinal = "";
-  if (servicosResumo && textoDigitado)
+  if (servicosResumo && textoDigitado) {
     observacaoFinal = `SERVIÇOS: ${servicosResumo} - ${textoDigitado}`;
-  else if (servicosResumo) observacaoFinal = `SERVIÇOS: ${servicosResumo}`;
-  else observacaoFinal = textoDigitado;
+  } else if (servicosResumo) {
+    observacaoFinal = `SERVIÇOS: ${servicosResumo}`;
+  } else {
+    observacaoFinal = textoDigitado;
+  }
+
+  const detalhesExtras = [];
+  if (placaGeral) detalhesExtras.push(`PLACA: ${placaGeral}`);
+  if (corGeral) detalhesExtras.push(`COR: ${corGeral}`);
+
+  if (detalhesExtras.length > 0) {
+    observacaoFinal += ` | ${detalhesExtras.join(" | ")}`;
+  }
 
   const valorTotalGeral = itensOS.reduce((soma, i) => soma + i.valor, 0);
   const qtdTotalGeral = itensOS.reduce((soma, i) => soma + i.quantidade, 0);
@@ -770,6 +902,7 @@ form.addEventListener("submit", async (event) => {
     observacao: observacaoFinal,
     aparelho: nomeAparelho || "Aparelho Desconhecido",
     cor: itensOS.find((i) => i.cor)?.cor || null,
+    placa: itensOS.find((i) => i.placa)?.placa || placaAvulsa || null,
     numero_os: itensOS.find((i) => i.numero_os)?.numero_os || null,
     numero_os_conserto:
       itensOS.find((i) => i.numero_os_conserto)?.numero_os_conserto || null,
@@ -816,11 +949,16 @@ form.addEventListener("submit", async (event) => {
     telefone.placeholder = "(00) 00000-0000";
 
     corReforma = "";
+    placaVeiculo = "";
     numeroOSReforma = "";
     numeroOSConserto = "";
 
+    placaAvulsa = "";
+    atualizarBotaoPlaca(); // Reseta o botão visualmente
+
     modalInputCor.value = "";
     modalInputNumero.value = "";
+    modalInputPlaca.value = "";
     valorUnitarioAtual = 0;
 
     fotos = [];
@@ -841,10 +979,16 @@ form.addEventListener("submit", async (event) => {
     btnDDI.innerHTML = "🇧🇷 +55";
     telefone.placeholder = "(00) 00000-0000";
     corReforma = "";
+    placaVeiculo = "";
     numeroOSReforma = "";
     numeroOSConserto = "";
+
+    placaAvulsa = "";
+    atualizarBotaoPlaca(); // Reseta o botão visualmente
+
     modalInputCor.value = "";
     modalInputNumero.value = "";
+    modalInputPlaca.value = "";
     valorUnitarioAtual = 0;
     fotos = [];
     renderFotos();
@@ -1038,6 +1182,7 @@ function atualizarCarrossel() {
 
 carregarServicosFormulario().then(() => {
   renderFotos();
+  atualizarBotaoPlaca(); // Garante que o botão comece no estado correto
   atualizarProgresso();
 });
 
