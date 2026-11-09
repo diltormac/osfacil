@@ -499,6 +499,37 @@ export async function compartilharOS(osId) {
   // 3. Cor (se houver)
   if (os.cor) linhas.push(`Cor: ${os.cor}`);
 
+  // =========================================================
+  // NOVO: Números de OS de Reforma, Conserto e Solda
+  // =========================================================
+  const itens = Array.isArray(os.itens_servicos) ? os.itens_servicos : [];
+  const nomesItens = itens.map((i) => String(i.servico || "").toUpperCase());
+
+  const temReforma = nomesItens.some((n) => n.includes("REFORMA"));
+  const temConserto = nomesItens.some((n) => n.includes("CONSERTO"));
+  const temSolda = nomesItens.some((n) => n.includes("SOLDA"));
+
+  const numeros = [];
+
+  if (temReforma) {
+    // Reforma usa o número principal
+    const num = os.numero_os || os.numero_os_conserto || `#${os.id}`;
+    numeros.push(`Reforma: ${num}`);
+  }
+  if (temConserto) {
+    const num = os.numero_os_conserto || os.numero_os || `#${os.id}`;
+    numeros.push(`Conserto: ${num}`);
+  }
+  if (temSolda) {
+    const num = os.numero_os_conserto || os.numero_os || `#${os.id}`;
+    numeros.push(`Solda: ${num}`);
+  }
+
+  if (numeros.length > 0) {
+    linhas.push(`\nNúmeros: ${numeros.join(" | ")}`);
+  }
+  // =========================================================
+
   // 4. Observações (Limpando a placa e cor do texto para não duplicar)
   if (os.observacao) {
     let obsLimpa = os.observacao;
