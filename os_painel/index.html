@@ -645,9 +645,39 @@
 
     <div id="toast" class="toast" role="status" aria-live="polite"></div>
 
+    <!-- ============================================================
+         BIBLIOTECAS CDN
+         ============================================================ -->
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
+
+    <!-- ============================================================
+         SETUP DO PLUGIN CAMERA (Capacitor)
+         Precisa vir ANTES do main.js para o APK registrar o plugin
+         ============================================================ -->
+    <script>
+      (function setupCamera() {
+        if (
+          window.Capacitor &&
+          window.Capacitor.Plugins &&
+          window.Capacitor.Plugins.Camera
+        ) {
+          window.Camera = window.Capacitor.Plugins.Camera;
+        } else if (
+          window.Capacitor &&
+          typeof window.Capacitor.registerPlugin === "function"
+        ) {
+          try {
+            window.Camera = window.Capacitor.registerPlugin("Camera");
+          } catch (_) {}
+        }
+      })();
+    </script>
+
+    <!-- ============================================================
+         MÓDULO PRINCIPAL (SEMPRE POR ÚLTIMO)
+         ============================================================ -->
     <script type="module" src="js/main.js"></script>
   </body>
 </html>

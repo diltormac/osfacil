@@ -15,6 +15,7 @@ import { compartilharTexto } from "../compartilhamento.js";
 import { criarDropdownCustom } from "./dropdownCustom.js";
 import { supabaseClient } from "../config.js";
 import { abrirRelatorio } from "./relatorio.js";
+import { fotosOSHTML } from "./modalFotosOS.js";
 
 let fotografiaFormulario = "";
 
@@ -41,7 +42,6 @@ function itemHTML(item, idx) {
   return `
     <div class="flex items-center justify-between gap-2 bg-slate-50 border border-slate-200 rounded-lg p-2.5 text-xs">
       
-      <!-- Nome do Serviço -->
       <div class="flex-1 min-w-0 pr-2">
         <span class="font-bold text-slate-800 truncate block" title="${esc(item.servico) || "Serviço sem nome"}">
           ${esc(item.servico) || "Serviço sem nome"}
@@ -50,17 +50,14 @@ function itemHTML(item, idx) {
         ${item.placa ? `<span class="text-[10px] text-emerald-600 font-medium truncate block mt-0.5">Placa: ${esc(item.placa)}</span>` : ""}
       </div>
       
-      <!-- Quantidade -->
       <div class="w-8 text-center text-slate-500 font-semibold flex-shrink-0">
         ${esc(item.quantidade ?? 1)}
       </div>
       
-      <!-- Valor -->
       <div class="w-20 text-right font-bold text-emerald-600 tabular-nums flex-shrink-0">
         ${formatarMoeda(item.valor)}
       </div>
       
-      <!-- Botões de Ação -->
       <div class="flex items-center justify-center gap-1 flex-shrink-0 w-[56px]">
         <button type="button" onclick="modalEditarItem(${idx})" class="text-indigo-600 hover:text-indigo-800 p-1 transition-colors" title="Editar item" aria-label="Editar quantidade e valor de ${esc(item.servico)}">
           <i class="fa-solid fa-pen text-[12px]" aria-hidden="true"></i>
@@ -76,7 +73,6 @@ function itemHTML(item, idx) {
 export function atualizarHTMLItensModal() {
   const container = document.getElementById("modalItensContainer");
 
-  // Atualiza o campo bloqueado de serviços em tempo real e ajusta a altura
   const campoResumo = document.getElementById("editObservacaoServicos");
   if (campoResumo) {
     const nomes = itensRascunho.map((i) => i.servico).join(" / ");
@@ -89,7 +85,6 @@ export function atualizarHTMLItensModal() {
       ? `SERVIÇOS: ${nomes}${txtPlaca}`
       : "Nenhum serviço adicionado.";
 
-    // Ajusta a altura do textarea para o conteúdo
     campoResumo.style.height = "auto";
     campoResumo.style.height = campoResumo.scrollHeight + "px";
   }
@@ -112,9 +107,6 @@ export function atualizarHTMLItensModal() {
   container.innerHTML = cabecalho + itensRascunho.map(itemHTML).join("");
 }
 
-/* =========================================================
-   REMOVER ITEM (COM CONFIRMAÇÃO)
-   ========================================================= */
 export async function modalRemoverItem(_osId, index) {
   const item = itensRascunho[index];
   if (!item) return;
@@ -135,9 +127,6 @@ export async function modalRemoverItem(_osId, index) {
   toast("Serviço removido da lista.");
 }
 
-/* =========================================================
-   EDITAR ITEM (NOME, QUANTIDADE E VALOR)
-   ========================================================= */
 export function modalEditarItem(index) {
   fecharCamadaPorId("modalEditarItem");
   const item = itensRascunho[index];
@@ -271,6 +260,7 @@ function lerFormulario() {
     "editValor",
     "editObservacao",
     "editObservacaoServicos",
+    "editFormaPagamento", // <-- ADICIONADO AQUI
   ];
   return JSON.stringify({
     campos: ids.map((id) => document.getElementById(id)?.value ?? ""),
@@ -341,13 +331,6 @@ export async function abrirDetalhes(idOuObjeto) {
     ? os.numero_os_conserto || os.numero_os || ""
     : os.numero_os || "";
 
-  const fotosValidas = (os.fotos_urls || [])
-    .map((url, idx) => ({ url, idx }))
-    .filter(({ url }) => urlSegura(url));
-
-  // =========================================================
-  // LEITURA DO TEXTO (ANTIGO E NOVO)
-  // =========================================================
   let textoObsAntiga = os.observacao || "";
   let textoManualSalvo = os.observacao_manual || "";
 
@@ -371,19 +354,10 @@ export async function abrirDetalhes(idOuObjeto) {
     ? `SERVIÇOS: ${nomesServicos}${txtPlaca}`
     : "Nenhum serviço adicionado.";
 
-  const fotosHTML = fotosValidas.length
-    ? `<div class="grid grid-cols-2 sm:grid-cols-4 gap-2">${fotosValidas
-        .map(
-          ({ url, idx }) =>
-            `<button type="button" class="block overflow-hidden rounded-[10px]" onclick="abrirLightboxPorOS(${os.id}, ${idx})" aria-label="Ampliar foto ${idx + 1}"><img src="${urlSegura(url)}" alt="Foto ${idx + 1} da OS" loading="lazy" decoding="async" class="os-foto photo-thumb cursor-pointer transition-transform duration-300 hover:scale-125"></button>`,
-        )
-        .join("")}</div>`
-    : `<p class="text-xs text-slate-500 italic bg-slate-50 p-4 rounded-lg text-center">Nenhuma foto cadastrada nesta OS.</p>`;
-
   document.getElementById("modalBody").innerHTML = `
            <div class="grid grid-cols-1 sm:grid-cols-3 gap-3 sm:gap-4">
       
-      <!-- 1. Nº DA VENDA (Agora na esquerda) -->
+      <!-- 1. Nº DA VENDA -->
       <div>
         <label for="editNumeroVenda" class="text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1 block">Nº da Venda</label>
         <div class="relative flex items-center">
@@ -394,7 +368,7 @@ export async function abrirDetalhes(idOuObjeto) {
         </div>
       </div>
 
-      <!-- 2. NÚMERO DA OS (Agora no meio) -->
+      <!-- 2. NÚMERO DA OS -->
       <div>
         <label for="editNumeroOS" class="text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1 block">
           ${conserto ? "Número da OS (Conserto)" : "Número da OS"}
@@ -407,7 +381,7 @@ export async function abrirDetalhes(idOuObjeto) {
         </div>
       </div>
 
-      <!-- 3. STATUS (Agora na direita) -->
+      <!-- 3. STATUS -->
       <div>
         <label class="text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1 block">Status</label>
         <div id="editStatus"></div>
@@ -447,7 +421,6 @@ export async function abrirDetalhes(idOuObjeto) {
       </div>
     </div>
 
-    <!-- CAMPOS DE COR E PLACA -->
     <div class="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
       <div>
         <label for="editCor" class="text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1 block">Cor</label>
@@ -475,25 +448,30 @@ export async function abrirDetalhes(idOuObjeto) {
       <div id="modalItensContainer" class="space-y-2 max-h-40 overflow-y-auto mb-2"></div>
     </div>
 
-    <div>
-      <label for="editValor" class="text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1 block">Valor Total (R$)</label>
-      <input type="text" inputmode="decimal" id="editValor" value="${esc(formatarValorCampo(os.valor ?? 0))}" class="edit-input font-bold text-emerald-600 tabular-nums" />
+    <!-- VALOR E FORMA DE PAGAMENTO -->
+    <div class="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
+      <div>
+        <label for="editValor" class="text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1 block">Valor Total (R$)</label>
+        <input type="text" inputmode="decimal" id="editValor" value="${esc(formatarValorCampo(os.valor ?? 0))}" class="edit-input font-bold text-emerald-600 tabular-nums" />
+      </div>
+      
+      <!-- CAMPO NOVO DE FORMA DE PAGAMENTO -->
+      <div>
+        <label class="text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1 block">Forma de Pagamento</label>
+        <div id="editFormaPagamento"></div>
+      </div>
     </div>
 
     <!-- CAMPO ÚNICO: SERVIÇOS + OBSERVAÇÃO DO USUÁRIO -->
     <div>
       <div class="flex items-center justify-between mb-1">
         <label class="text-[10px] font-bold text-slate-500 uppercase tracking-wider block">Descrição / Observação</label>
-        <!-- BOTÃO DE COPIAR CORRIGIDO -->
         <button type="button" onclick="copiarObservacaoCompleta()" class="text-xs text-indigo-600 hover:text-indigo-800 font-bold flex items-center gap-1">
           <i class="fa-solid fa-copy" aria-hidden="true"></i> Copiar Observação
         </button>
       </div>
       
-      <!-- O Container que cresce automaticamente -->
       <div class="w-full rounded-lg border border-slate-300 bg-white flex flex-col p-3 focus-within:border-indigo-500 focus-within:ring-2 focus-within:ring-indigo-500/20 transition-all">
-        
-        <!-- A parte de Serviços: Bloqueada, cinza, quebra linha e cresce sozinha -->
         <textarea 
           id="editObservacaoServicos" 
           readonly 
@@ -502,23 +480,22 @@ export async function abrirDetalhes(idOuObjeto) {
           rows="1"
         >${esc(textoServicosResumo)}</textarea>
         
-        <!-- A parte do Usuário: Transparente, editável, com altura mínima -->
         <textarea 
           id="editObservacao" 
           maxlength="2000" 
           class="w-full min-h-[80px] bg-transparent resize-none outline-none text-slate-800 font-medium p-0 m-0 border-none focus:ring-0 mt-2" 
           placeholder=""
         >${esc(textoUsuarioFinal)}</textarea>
-        
       </div>
     </div>
 
-    <div>
-      <p class="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-2">Fotos Anexadas</p>
-      ${fotosHTML}
+    <div id="modalFotosContainer">
+      <div class="flex items-center justify-between mb-2">
+        <p class="text-[10px] font-bold text-slate-500 uppercase tracking-wider">Fotos Anexadas</p>
+      </div>
+      ${fotosOSHTML(os)}
     </div>
 
-    <!-- BOTÕES DE AÇÃO -->
     <div class="pt-4 border-t border-slate-200 flex flex-col-reverse sm:flex-row sm:justify-between sm:items-center gap-2">
       <button type="button" id="btnExcluirOS" onclick="excluirOS(${os.id})" class="w-full sm:w-auto px-4 py-2.5 bg-red-50 hover:bg-red-100 text-red-600 border border-red-200 rounded-lg text-sm font-bold transition flex items-center justify-center gap-2 disabled:opacity-60 disabled:cursor-not-allowed">
         <i class="fa-solid fa-trash" aria-hidden="true"></i> Excluir
@@ -542,14 +519,12 @@ export async function abrirDetalhes(idOuObjeto) {
   atualizarHTMLItensModal();
   document.getElementById("modalDetalhes").classList.add("show");
 
-  // Função para copiar os dois campos juntos
   window.copiarObservacaoCompleta = function () {
     const textoServicos = document
       .getElementById("editObservacaoServicos")
       .value.trim();
     const textoUsuario = document.getElementById("editObservacao").value.trim();
 
-    // Junta o texto de cima com o de baixo (pulando uma linha)
     const textoFinal =
       textoServicos + (textoUsuario ? `\n\n${textoUsuario}` : "");
 
@@ -566,7 +541,6 @@ export async function abrirDetalhes(idOuObjeto) {
       );
   };
 
-  // Função que ajusta a altura do campo travado para mostrar tudo
   const ajustarAlturaServicos = () => {
     const txt = document.getElementById("editObservacaoServicos");
     if (txt) {
@@ -575,15 +549,14 @@ export async function abrirDetalhes(idOuObjeto) {
     }
   };
 
-  // Chama a função logo que abre o modal
   setTimeout(ajustarAlturaServicos, 50);
 
-  // Se o usuário mudar a placa, ajusta a altura de novo
   const inputPlaca = document.getElementById("editPlaca");
   if (inputPlaca) {
     inputPlaca.addEventListener("input", ajustarAlturaServicos);
   }
 
+  // Dropdown de Status
   const editStatusContainer = document.getElementById("editStatus");
   if (editStatusContainer) {
     const statusDropdown = criarDropdownCustom({
@@ -601,7 +574,30 @@ export async function abrirDetalhes(idOuObjeto) {
     editStatusContainer.replaceWith(statusDropdown);
   }
 
-  // Adiciona a máscara no campo CPF/CNPJ
+  // Dropdown de Forma de Pagamento
+  const editFormaPagamentoContainer =
+    document.getElementById("editFormaPagamento");
+  if (editFormaPagamentoContainer) {
+    const pagamentoDropdown = criarDropdownCustom({
+      id: "editFormaPagamento",
+      name: "forma_pagamento",
+      value: os.forma_pagamento || "",
+      placeholder: "Selecione...",
+      options: [
+        { value: "", text: "Não definida" },
+        { value: "Dinheiro", text: "Dinheiro" },
+        { value: "Débito", text: "Débito" },
+        { value: "Crédito", text: "Crédito" },
+        { value: "Pix", text: "Pix" },
+        { value: "Boleto", text: "Boleto" },
+        { value: "Outros", text: "Outros" },
+      ],
+      className: "w-full",
+    });
+    editFormaPagamentoContainer.replaceWith(pagamentoDropdown);
+  }
+
+  // Máscara CPF/CNPJ
   const inputDocumento = document.getElementById("editDocumento");
   if (inputDocumento) {
     inputDocumento.addEventListener("input", (e) => {
@@ -654,6 +650,7 @@ export async function compartilharOS(osId) {
   if (os.nome) linhas.push(`Cliente: ${os.nome}`);
   if (os.placa) linhas.push(`Placa: ${os.placa}`);
   if (os.cor) linhas.push(`Cor: ${os.cor}`);
+  if (os.forma_pagamento) linhas.push(`Pagamento: ${os.forma_pagamento}`);
 
   const itens = Array.isArray(os.itens_servicos) ? os.itens_servicos : [];
   const nomesItens = itens.map((i) => String(i.servico || "").toUpperCase());

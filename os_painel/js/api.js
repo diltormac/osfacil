@@ -38,6 +38,53 @@ import {
 
 let carregando = false;
 
+/* =========================================================
+   REGRA DE STATUS AUTOMÁTICO (10.000)
+   ========================================================= */
+export const LIMIAR_VENDA = 10000;
+
+export function calcularStatusAutomatico(numeroVenda, maxNumeroVenda) {
+  const numTexto = String(numeroVenda || "").trim();
+  if (!numTexto) return null;
+
+  const num = parseInt(numTexto.replace(/\D/g, ""));
+  if (isNaN(num)) return null;
+
+  if (maxNumeroVenda <= 0) return null;
+
+  const diferenca = maxNumeroVenda - num;
+  if (diferenca < LIMIAR_VENDA) return "Concluído";
+  return "Em andamento";
+}
+
+export async function buscarMaxNumeroVenda(excluirId = null) {
+  if (!supabaseClient) return 0;
+  try {
+    let query = supabaseClient
+      .from("ordens_servico")
+      .select("id, numero_venda")
+      .not("numero_venda", "is", null)
+      .neq("numero_venda", "");
+
+    if (excluirId != null) {
+      query = query.neq("id", excluirId);
+    }
+
+    const { data, error } = await query;
+    if (error) throw error;
+
+    let max = 0;
+    (data || []).forEach((item) => {
+      const num = parseInt(String(item.numero_venda).replace(/\D/g, ""));
+      if (!isNaN(num) && num > max) max = num;
+    });
+    return max;
+  } catch (e) {
+    console.error("Erro ao buscar MAX numero_venda:", e);
+    return 0;
+  }
+}
+
 function normalizarOS(item) {
   return {
     ...item,
@@ -50,6 +97,7 @@ function normalizarOS(item) {
     servico: item.servico || "",
     cor: item.cor || "",
     placa: item.placa || "",
+    forma_pagamento: item.forma_pagamento || "", // <-- NOVO CAMPO AQUI
     fotos_urls: Array.isArray(item.fotos_urls)
       ? item.fotos_urls.filter(Boolean)
       : [],
@@ -79,36 +127,17 @@ function montarConsultaOS({
     const partes = [];
     const textoSeguro = q.replace(/[%,()]/g, "").trim();
 
-    // 1. Busca geral no texto (nome, serviço, cor, observação)
-    if (textoSeguro) {
-      partes.push(`busca_normalizada.ilike.%${textoSeguro}%`);
-    }
-
-    // 2. Busca por Telefone
-    if (qDigitos.length >= 3) {
-      partes.push(`telefone.ilike.%${qDigitos}%`);
-    }
-
-    // 3. Busca por Placa
-    if (textoSeguro) {
-      partes.push(`placa.ilike.%${textoSeguro}%`);
-    }
-
-    // 4. Busca por ID do banco (caso digite o número pequeno)
-    if (isNumero) {
-      partes.push(`id.eq.${qDigitos}`);
-    }
-
-    // 🔥 5. NOVO: Busca por Nº da Venda e Números de OS (Reforma e Conserto)
+    if (textoSeguro) partes.push(`busca_normalizada.ilike.%${textoSeguro}%`);
+    if (qDigitos.length >= 3) partes.push(`telefone.ilike.%${qDigitos}%`);
+    if (textoSeguro) partes.push(`placa.ilike.%${textoSeguro}%`);
+    if (isNumero) partes.push(`id.eq.${qDigitos}`);
     if (textoSeguro) {
       partes.push(`numero_venda.ilike.%${textoSeguro}%`);
       partes.push(`numero_os.ilike.%${textoSeguro}%`);
       partes.push(`numero_os_conserto.ilike.%${textoSeguro}%`);
     }
 
-    if (partes.length > 0) {
-      consulta = consulta.or(partes.join(","));
-    }
+    if (partes.length > 0) consulta = consulta.or(partes.join(","));
   }
 
   if (estado.dataInicial)
@@ -405,7 +434,10 @@ export async function salvarEdicoes(id) {
     .toUpperCase();
   const novoValor = lerValor(document.getElementById("editValor").value);
 
-  // 🔥 SEPARAÇÃO DA OBSERVAÇÃO
+  // 🔥 NOVO CAMPO FORMA DE PAGAMENTO
+  const formaPagamento =
+    document.getElementById("editFormaPagamento")?.value || "";
+
   const textoServicosResumo =
     document.getElementById("editObservacaoServicos")?.value || "";
   const textoAutomático = textoServicosResumo.trim();
@@ -414,7 +446,6 @@ export async function salvarEdicoes(id) {
     .value.trim()
     .toUpperCase();
 
-  // Proteção para não duplicar texto antigo
   if (textoUsuario === osAtual.observacao || textoUsuario === textoAutomático) {
     textoUsuario = "";
   }
@@ -460,20 +491,56 @@ export async function salvarEdicoes(id) {
     );
   }
 
+  /* =========================================================
+     LÓGICA DE STATUS SILENCIOSA
+     ========================================================= */
+  const statusManualSelecionado =
+    document.getElementById("editStatus").value || "Pendente";
+
+  let statusFinal = statusManualSelecionado;
+  let statusFoiAutomatico = false;
+  let avisoStatus = "";
+
+  if (!inputVendaVal) {
+    if (
+      statusManualSelecionado !== "Pendente" &&
+      statusManualSelecionado !== "Cancelado"
+    ) {
+      statusFinal = "Pendente";
+      statusFoiAutomatico = true;
+      avisoStatus = "Sem Nº da Venda: status forçado para Pendente.";
+    }
+  } else if (statusManualSelecionado === "Cancelado") {
+    statusFinal = "Cancelado";
+  } else {
+    const maxNumeroVenda = await buscarMaxNumeroVenda(id);
+    const statusSugerido = calcularStatusAutomatico(
+      inputVendaVal,
+      maxNumeroVenda,
+    );
+
+    if (statusSugerido) {
+      statusFinal = statusSugerido;
+      statusFoiAutomatico = true;
+      avisoStatus = `Status definido automaticamente: ${statusFinal}`;
+    }
+  }
+
   const dadosAtualizacao = {
-    status: document.getElementById("editStatus").value,
+    status: statusFinal,
     nome,
     telefone,
     documento: documento || null,
     cor,
     placa: placa || null,
     valor: novoValor,
-    observacao: textoAutomático, // Salva os serviços gerados pelo sistema
-    observacao_manual: textoUsuario, // Salva o texto manual do usuário
+    observacao: textoAutomático,
+    observacao_manual: textoUsuario,
     itens_servicos: itensAtualizados,
     servico: servicoResumo,
     quantidade: quantidadeResumo,
     numero_venda: inputVendaVal || null,
+    forma_pagamento: formaPagamento || null, // <-- SALVANDO NOVO CAMPO
   };
 
   if (ehConsertoOuSolda(osAtual))
@@ -497,7 +564,13 @@ export async function salvarEdicoes(id) {
 
     Object.assign(osAtual, dadosAtualizacao);
     setItensRascunho(itensAtualizados);
-    toast("OS atualizada com sucesso!");
+
+    if (statusFoiAutomatico && avisoStatus) {
+      toast(avisoStatus);
+    } else {
+      toast("OS atualizada com sucesso!");
+    }
+
     const { fecharModal } = await import("./ui.js");
     fecharModal({ forcar: true });
     carregarResumoDashboard();

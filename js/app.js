@@ -236,19 +236,9 @@ async function buscarNomePorDocumento(documento) {
 }
 
 if (btnAbrirModalDocumento) {
-  btnAbrirModalDocumento.addEventListener("click", (e) => {
-    e.preventDefault(); // <-- ADICIONE ESTA LINHA
+  btnAbrirModalDocumento.addEventListener("click", () => {
     inputDocumentoCliente.value = documentoCliente || "";
     modalDocumento.classList.add("show");
-    setTimeout(() => {
-      inputDocumentoCliente.focus();
-      inputDocumentoCliente.setSelectionRange(
-        inputDocumentoCliente.value.length,
-        inputDocumentoCliente.value.length,
-      );
-    }, 150); // Aumente o tempo para 300ms se o teclado do celular bugar a tela
-  });
-}
     setTimeout(() => {
       inputDocumentoCliente.focus();
       inputDocumentoCliente.setSelectionRange(

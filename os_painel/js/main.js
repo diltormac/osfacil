@@ -31,6 +31,8 @@ import {
   tratarFotoQuebrada,
   agendarBloqueioFaturamento,
   atualizarTudo,
+  adicionarFotosOS,
+  excluirFotoOS,
 } from "./ui.js";
 import { setTouchStartX, setTouchEndX, exibirFaturamento } from "./state.js";
 import { toast } from "./utils.js";
@@ -102,6 +104,8 @@ Object.assign(window, {
   carregarMaisOS,
   carregarMaisGaleria,
   mudarView,
+  adicionarFotosOS,
+  excluirFotoOS,
 });
 
 Object.assign(window, {
@@ -189,7 +193,6 @@ const inputDataFinal = document.getElementById("dataFinal");
 const containerFiltroServico = document.getElementById("filtroServico");
 const btnLimparDatas = document.getElementById("btnLimparDatas");
 
-// 1. Inicializa o Calendário Customizado (Flatpickr)
 if (inputDataInicial && inputDataFinal) {
   const configCalendario = {
     locale: "pt",
@@ -209,7 +212,6 @@ if (inputDataInicial && inputDataFinal) {
   flatpickr(inputDataFinal, configCalendario);
 }
 
-// 2. Substitui o <select> nativo por um dropdown customizado
 async function popularFiltroServicos() {
   if (!containerFiltroServico) return;
 
@@ -242,7 +244,6 @@ async function popularFiltroServicos() {
 
 popularFiltroServicos();
 
-// 3. Botão de limpar filtros (ajustado para Flatpickr e Dropdown custom)
 if (btnLimparDatas) {
   btnLimparDatas.addEventListener("click", () => {
     estado.dataInicial = "";
@@ -293,7 +294,6 @@ window.addEventListener("resize", () => {
   if (window.innerWidth >= 1024) fecharSidebar();
 });
 
-/* Teclado: Esc fecha a camada de cima; setas navegam no lightbox. */
 document.addEventListener("keydown", (e) => {
   if (e.key === "Escape") {
     if (fecharCamadaSuperior()) e.preventDefault();
@@ -305,7 +305,6 @@ document.addEventListener("keydown", (e) => {
   }
 });
 
-/* Card de faturamento acionável pelo teclado (Enter ou Espaço). */
 const cardFaturamento = document.getElementById("cardFaturamento");
 cardFaturamento?.addEventListener("keydown", (e) => {
   if (e.key === "Enter" || e.key === " ") {
@@ -314,7 +313,6 @@ cardFaturamento?.addEventListener("keydown", (e) => {
   }
 });
 
-/* Fotos que não carregam (apagadas do armazenamento ou sem internet). */
 document.addEventListener(
   "error",
   (e) => {
@@ -331,7 +329,6 @@ document.addEventListener(
   true,
 );
 
-/* Rede caiu / voltou enquanto o app está aberto. */
 window.addEventListener("offline", () => {
   toast(
     "Sem conexão com a internet. As alterações não serão salvas até a rede voltar.",
@@ -343,17 +340,15 @@ window.addEventListener("online", () => {
   carregarDados();
 });
 
-/* Faturamento liberado volta a ficar oculto no horário marcado. */
 if (exibirFaturamento) {
   agendarBloqueioFaturamento(
     Number(sessionStorage.getItem("@osfacil_faturamento")),
   );
 }
 
-/* ---- ESCUTA O EVENTO DO COMPARTILHAMENTO (Substitui o prompt nativo) ---- */
 window.addEventListener("osfacil_toast", (e) => {
   toast(e.detail.mensagem, e.detail.tipo);
 });
 
-atualizarTudo(); // mostra "Carregando…" enquanto a consulta não volta
+atualizarTudo();
 carregarDados();
