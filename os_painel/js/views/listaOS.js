@@ -94,7 +94,18 @@ export function renderOS() {
         : "";
       return `
       <tr class="table-row align-top hover:bg-slate-50 transition-colors">
-        <td class="px-3 py-3 whitespace-nowrap"><span class="text-xs font-bold text-indigo-600">${esc(numeroExibicao(o))}</span></td>
+        
+        <!-- COLUNA DO Nº DA VENDA / ID -->
+        <td class="px-3 py-3 whitespace-nowrap">
+          <div class="flex flex-col">
+            ${
+              o.numero_venda
+                ? `<span class="text-xs font-bold text-emerald-600" title="Nº da Venda"> ${esc(o.numero_venda)}</span>
+                   <span class="text-[10px] text-slate-400 font-medium" title="ID do Sistema">${esc(numeroExibicao(o))}</span>`
+                : `<span class="text-xs font-bold text-indigo-600">${esc(numeroExibicao(o))}</span>`
+            }
+          </div>
+        </td>
         
         <td class="px-3 py-3">
           <div class="flex items-start gap-2 min-w-[150px]">
@@ -156,7 +167,17 @@ export function renderOS() {
               <p class="text-[11px] text-slate-500 truncate">${esc(o.telefone) || "-"}</p>
             </div>
           </div>
-          <span class="text-[10px] font-bold text-indigo-600 bg-indigo-50 px-2 py-1 rounded-md flex-shrink-0">${esc(numeroExibicao(o))}</span>
+          
+          <!-- BADGE DO Nº DA VENDA / ID NO MOBILE -->
+          <div class="flex flex-col items-end flex-shrink-0">
+            ${
+              o.numero_venda
+                ? `<span class="text-[10px] font-bold text-emerald-700 bg-emerald-50 px-2 py-1 rounded-md" title="Nº da Venda">Venda: ${esc(o.numero_venda)}</span>
+                   <span class="text-[9px] text-slate-400 font-medium mt-0.5" title="ID do Sistema">${esc(numeroExibicao(o))}</span>`
+                : `<span class="text-[10px] font-bold text-indigo-600 bg-indigo-50 px-2 py-1 rounded-md">${esc(numeroExibicao(o))}</span>`
+            }
+          </div>
+          
         </div>
 
         <div class="flex flex-wrap gap-2 mb-3">

@@ -44,9 +44,12 @@ function normalizarOS(item) {
     status: item.status || "Pendente",
     nome: item.nome || "",
     telefone: item.telefone || "",
+    documento: item.documento || "",
+    numero_venda: item.numero_venda || "",
+    observacao_manual: item.observacao_manual || "",
     servico: item.servico || "",
     cor: item.cor || "",
-    placa: item.placa || "", // <-- ADICIONADO PARA NORMALIZAR A PLACA
+    placa: item.placa || "",
     fotos_urls: Array.isArray(item.fotos_urls)
       ? item.fotos_urls.filter(Boolean)
       : [],
@@ -63,45 +66,44 @@ function montarConsultaOS({
 } = {}) {
   let consulta = supabaseClient.from("ordens_servico").select("*");
 
-  // Filtro de Status
-  if (estado.filtroStatus && estado.filtroStatus !== "all") {
+  if (estado.filtroStatus && estado.filtroStatus !== "all")
     consulta = consulta.eq("status", estado.filtroStatus);
-  }
-
-  // Filtro de Serviço
-  if (estado.filtroServico && estado.filtroServico !== "all") {
+  if (estado.filtroServico && estado.filtroServico !== "all")
     consulta = consulta.ilike("servico", `%${estado.filtroServico}%`);
-  }
 
   const termo = estado.busca.trim();
   if (termo) {
     const q = normalizar(termo);
     const qDigitos = q.replace(/\D/g, "");
-
-    // Verifica se o que foi digitado é um número (para buscar pelo ID)
     const isNumero = /^\d+$/.test(qDigitos);
-
     const partes = [];
-
-    // 1. Busca por texto (nome, serviço, cor, observação)
     const textoSeguro = q.replace(/[%,()]/g, "").trim();
+
+    // 1. Busca geral no texto (nome, serviço, cor, observação)
     if (textoSeguro) {
       partes.push(`busca_normalizada.ilike.%${textoSeguro}%`);
     }
 
-    // 2. Busca por Telefone (se tiver números suficientes)
+    // 2. Busca por Telefone
     if (qDigitos.length >= 3) {
       partes.push(`telefone.ilike.%${qDigitos}%`);
     }
 
-    // 3. Busca por Placa (texto exato ou parcial)
+    // 3. Busca por Placa
     if (textoSeguro) {
       partes.push(`placa.ilike.%${textoSeguro}%`);
     }
 
-    // 4. Busca por ID (se o termo for um número)
+    // 4. Busca por ID do banco (caso digite o número pequeno)
     if (isNumero) {
       partes.push(`id.eq.${qDigitos}`);
+    }
+
+    // 🔥 5. NOVO: Busca por Nº da Venda e Números de OS (Reforma e Conserto)
+    if (textoSeguro) {
+      partes.push(`numero_venda.ilike.%${textoSeguro}%`);
+      partes.push(`numero_os.ilike.%${textoSeguro}%`);
+      partes.push(`numero_os_conserto.ilike.%${textoSeguro}%`);
     }
 
     if (partes.length > 0) {
@@ -109,15 +111,11 @@ function montarConsultaOS({
     }
   }
 
-  // Filtros de Data
-  if (estado.dataInicial) {
+  if (estado.dataInicial)
     consulta = consulta.gte("created_at", `${estado.dataInicial}T00:00:00`);
-  }
-  if (estado.dataFinal) {
+  if (estado.dataFinal)
     consulta = consulta.lte("created_at", `${estado.dataFinal}T23:59:59`);
-  }
 
-  // Ordenação
   switch (estado.ordenacao) {
     case "data-asc":
       consulta = consulta.order("created_at", { ascending: true });
@@ -134,10 +132,7 @@ function montarConsultaOS({
       break;
   }
 
-  if (comRange) {
-    consulta = consulta.range(offset, offset + limite - 1);
-  }
-
+  if (comRange) consulta = consulta.range(offset, offset + limite - 1);
   return consulta;
 }
 
@@ -146,24 +141,18 @@ async function executarConsulta(consulta) {
   return sinal ? consulta.abortSignal(sinal) : consulta;
 }
 
-/* Carrega a primeira página de OS + resumo do dashboard + últimas OS + galeria. */
 export async function carregarDados() {
   if (carregando) return;
   carregando = true;
-
   const { atualizarTudo, definirAtualizando } = await import("./ui.js");
   definirAtualizando(true);
-
   try {
-    if (!supabaseClient) {
-      throw new Error("Failed to fetch: biblioteca do Supabase não carregou");
-    }
-
+    if (!supabaseClient) throw new Error("Failed to fetch");
     setPaginaOS(0);
-    const consulta = montarConsultaOS({ offset: 0 });
-    const { data, error } = await executarConsulta(consulta);
+    const { data, error } = await executarConsulta(
+      montarConsultaOS({ offset: 0 }),
+    );
     if (error) throw error;
-
     setListaOS((data || []).map(normalizarOS));
     setTemMaisOS((data || []).length === TAMANHO_PAGINA_OS);
     estado.carregamento = "ok";
@@ -178,13 +167,11 @@ export async function carregarDados() {
     definirAtualizando(false);
     atualizarTudo();
   }
-
   carregarResumoDashboard();
   carregarUltimasOS();
   carregarGaleria();
 }
 
-/* Recarrega apenas a lista de OS (usado após mudança de filtro/busca/ordenação). */
 export async function recarregarListaOS() {
   if (carregando) return;
   carregando = true;
@@ -212,7 +199,6 @@ export async function recarregarListaOS() {
   }
 }
 
-/* Carrega a próxima página de OS (botão "Carregar mais"). */
 export async function carregarMaisOS() {
   if (carregando || !supabaseClient) return;
   carregando = true;
@@ -401,23 +387,37 @@ export async function salvarEdicoes(id) {
     .getElementById("editNumeroOS")
     .value.trim()
     .toUpperCase();
-
+  const inputVendaVal = (
+    document.getElementById("editNumeroVenda")?.value || ""
+  )
+    .trim()
+    .toUpperCase();
   const nome = document.getElementById("editNome").value.trim().toUpperCase();
   const telefone = document.getElementById("editTelefone").value.trim();
-
-  // CAPTURA A COR E A PLACA
+  const documento = (
+    document.getElementById("editDocumento")?.value || ""
+  ).trim();
   const cor = (document.getElementById("editCor")?.value || "")
     .trim()
     .toUpperCase();
   const placa = (document.getElementById("editPlaca")?.value || "")
     .trim()
-    .toUpperCase(); // <-- CAPTURA A PLACA AQUI
-
+    .toUpperCase();
   const novoValor = lerValor(document.getElementById("editValor").value);
-  const novaObs = document
+
+  // 🔥 SEPARAÇÃO DA OBSERVAÇÃO
+  const textoServicosResumo =
+    document.getElementById("editObservacaoServicos")?.value || "";
+  const textoAutomático = textoServicosResumo.trim();
+  let textoUsuario = document
     .getElementById("editObservacao")
     .value.trim()
     .toUpperCase();
+
+  // Proteção para não duplicar texto antigo
+  if (textoUsuario === osAtual.observacao || textoUsuario === textoAutomático) {
+    textoUsuario = "";
+  }
 
   if (!nome)
     return marcarCampoInvalido("editNome", "Informe o nome do cliente.");
@@ -427,45 +427,28 @@ export async function salvarEdicoes(id) {
       "Informe o telefone do cliente.",
     );
   if (novoValor === null)
-    return marcarCampoInvalido(
-      "editValor",
-      "Valor total inválido. Use apenas números, ex: 150,00 (ou 0 se não houver cobrança).",
-    );
+    return marcarCampoInvalido("editValor", "Valor total inválido.");
   if (novoValor < 0)
-    return marcarCampoInvalido(
-      "editValor",
-      "O valor total não pode ser negativo.",
-    );
+    return marcarCampoInvalido("editValor", "O valor não pode ser negativo.");
 
-  // 1. Atualiza a cor dos itens de reforma E a placa dos itens de alinhamento
   const itensAtualizados = itensRascunho.map((item) => {
     const nomeItem = String(item.servico || "").toUpperCase();
     let novoItem = { ...item };
+    if (nomeItem.includes("REFORMA")) novoItem.cor = cor;
+    else novoItem.cor = "";
 
-    if (nomeItem.includes("REFORMA")) {
-      novoItem.cor = cor;
-    } else {
-      novoItem.cor = "";
-    }
-
-    // Se o serviço for de alinhamento, atualiza a placa
     if (
       nomeItem.includes("ALINHAMENTO") ||
       nomeItem.includes("CAMBER") ||
       nomeItem.includes("CASTER")
-    ) {
+    )
       novoItem.placa = placa;
-    } else {
-      novoItem.placa = null;
-    }
-
+    else novoItem.placa = null;
     return novoItem;
   });
 
-  // 2. Recalcula o campo "servico" e "quantidade" para a tabela principal
   let servicoResumo = "";
   let quantidadeResumo = 0;
-
   if (itensAtualizados.length > 0) {
     const nomesUnicos = [
       ...new Set(itensAtualizados.map((i) => String(i.servico).toUpperCase())),
@@ -481,20 +464,21 @@ export async function salvarEdicoes(id) {
     status: document.getElementById("editStatus").value,
     nome,
     telefone,
+    documento: documento || null,
     cor,
-    placa: placa || null, // <-- SALVA A PLACA NA COLUNA PRINCIPAL AQUI
+    placa: placa || null,
     valor: novoValor,
-    observacao: novaObs,
+    observacao: textoAutomático, // Salva os serviços gerados pelo sistema
+    observacao_manual: textoUsuario, // Salva o texto manual do usuário
     itens_servicos: itensAtualizados,
     servico: servicoResumo,
     quantidade: quantidadeResumo,
+    numero_venda: inputVendaVal || null,
   };
 
-  if (ehConsertoOuSolda(osAtual)) {
+  if (ehConsertoOuSolda(osAtual))
     dadosAtualizacao.numero_os_conserto = inputNumVal;
-  } else {
-    dadosAtualizacao.numero_os = inputNumVal;
-  }
+  else dadosAtualizacao.numero_os = inputNumVal;
 
   const destravar = travarBotao("btnSalvarOS", "Salvando…");
   if (!destravar) return;
@@ -513,7 +497,6 @@ export async function salvarEdicoes(id) {
 
     Object.assign(osAtual, dadosAtualizacao);
     setItensRascunho(itensAtualizados);
-
     toast("OS atualizada com sucesso!");
     const { fecharModal } = await import("./ui.js");
     fecharModal({ forcar: true });
@@ -537,8 +520,8 @@ export async function excluirOS(id) {
   const qtdFotos = os.fotos_urls?.length || 0;
   const aviso =
     qtdFotos > 0
-      ? `Excluir a OS de ${os.nome || "cliente sem nome"}? As ${qtdFotos} foto(s) também serão apagadas. Esta ação não pode ser desfeita.`
-      : `Excluir a OS de ${os.nome || "cliente sem nome"}? Esta ação não pode ser desfeita.`;
+      ? `Excluir a OS de ${os.nome || "cliente sem nome"}? As ${qtdFotos} foto(s) também serão apagadas.`
+      : `Excluir a OS de ${os.nome || "cliente sem nome"}?`;
 
   const continuar = await confirmarAcao({
     titulo: "Excluir Ordem de Serviço",
@@ -547,7 +530,6 @@ export async function excluirOS(id) {
     icone: "fa-trash-can",
     cor: "red",
   });
-
   if (!continuar) return;
 
   const destravar = travarBotao("btnExcluirOS", "Excluindo…");
@@ -580,11 +562,10 @@ export async function excluirOS(id) {
         fotosFalharam = true;
       }
     }
-
     setListaOS(listaOS.filter((o) => o.id !== id));
     toast(
       fotosFalharam
-        ? "OS excluída, mas algumas fotos não puderam ser apagadas do armazenamento."
+        ? "OS excluída, mas algumas fotos não puderam ser apagadas."
         : "OS excluída com sucesso!",
       fotosFalharam ? "error" : "success",
     );
@@ -601,9 +582,6 @@ export async function excluirOS(id) {
   }
 }
 
-/* =========================================================
-   REALTIME: ATUALIZAÇÃO AUTOMÁTICA EM TEMPO REAL
-   ========================================================= */
 if (supabaseClient) {
   supabaseClient
     .channel("public:ordens_servico")
@@ -615,13 +593,10 @@ if (supabaseClient) {
           "Realtime: Mudança detectada na tabela ordens_servico.",
           payload,
         );
-
         const modalAberto = document
           .getElementById("modalDetalhes")
           ?.classList.contains("show");
-        if (!modalAberto) {
-          carregarDados();
-        }
+        if (!modalAberto) carregarDados();
       },
     )
     .subscribe();

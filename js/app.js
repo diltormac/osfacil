@@ -28,18 +28,15 @@ let placaVeiculo = "";
 let numeroOSReforma = "";
 let numeroOSConserto = "";
 
-// Variável para armazenar a placa opcional avulsa
 let placaAvulsa = "";
-
 let itensOS = [];
 let opcoesServico = [];
-
-// Instância do dropdown customizado de serviço
 let dropdownServico = null;
-
-// Controle de multiplicação de valor
 let valorUnitarioAtual = 0;
 let ignorarMascaraValor = false;
+
+// Variáveis do CPF
+let documentoCliente = "";
 
 const CATALOGO_SERVICOS_KEY = "@osfacil_catalogo_servicos";
 const CATALOGO_SERVICOS_FALLBACK = [
@@ -82,7 +79,6 @@ async function carregarServicosFormulario() {
         .from("catalogo_servicos")
         .select("*");
       if (error) throw error;
-
       if (data && data.length > 0) {
         opcoesServico = data
           .map(normalizarItemCatalogo)
@@ -125,15 +121,207 @@ function formatarValorInput(valorNumerico) {
 }
 
 /* =========================================================
+   MODAL DE DOCUMENTO (CPF / CNPJ)
+   ========================================================= */
+const btnAbrirModalDocumento = document.getElementById(
+  "btnAbrirModalDocumento",
+);
+const modalDocumento = document.getElementById("modalDocumento");
+const inputDocumentoCliente = document.getElementById("inputDocumentoCliente");
+const btnFecharModalDocumento = document.getElementById(
+  "btnFecharModalDocumento",
+);
+const btnSalvarDocumento = document.getElementById("btnSalvarDocumento");
+const labelBtnDocumento = document.getElementById("labelBtnDocumento");
+
+function formatarDocumento(valor) {
+  const d = valor.replace(/\D/g, "").slice(0, 14);
+  if (d.length <= 11) {
+    if (d.length <= 3) return d;
+    if (d.length <= 6) return d.slice(0, 3) + "." + d.slice(3);
+    if (d.length <= 9)
+      return d.slice(0, 3) + "." + d.slice(3, 6) + "." + d.slice(6);
+    return (
+      d.slice(0, 3) +
+      "." +
+      d.slice(3, 6) +
+      "." +
+      d.slice(6, 9) +
+      "-" +
+      d.slice(9)
+    );
+  }
+  if (d.length <= 2) return d;
+  if (d.length <= 5) return d.slice(0, 2) + "." + d.slice(2);
+  if (d.length <= 8)
+    return d.slice(0, 2) + "." + d.slice(2, 5) + "." + d.slice(5);
+  if (d.length <= 12)
+    return (
+      d.slice(0, 2) +
+      "." +
+      d.slice(2, 5) +
+      "." +
+      d.slice(5, 8) +
+      "/" +
+      d.slice(8)
+    );
+  return (
+    d.slice(0, 2) +
+    "." +
+    d.slice(2, 5) +
+    "." +
+    d.slice(5, 8) +
+    "/" +
+    d.slice(8, 12) +
+    "-" +
+    d.slice(12)
+  );
+}
+
+function atualizarBotaoDocumento() {
+  if (!btnAbrirModalDocumento) return;
+  if (documentoCliente) {
+    btnAbrirModalDocumento.classList.remove(
+      "text-slate-500",
+      "bg-slate-100",
+      "hover:bg-indigo-50",
+    );
+    btnAbrirModalDocumento.classList.add(
+      "text-emerald-700",
+      "bg-emerald-50",
+      "hover:bg-emerald-100",
+    );
+    labelBtnDocumento.textContent =
+      documentoCliente.length > 16
+        ? documentoCliente.slice(0, 16) + "…"
+        : documentoCliente;
+    labelBtnDocumento.title = documentoCliente;
+  } else {
+    btnAbrirModalDocumento.classList.remove(
+      "text-emerald-700",
+      "bg-emerald-50",
+      "hover:bg-emerald-100",
+    );
+    btnAbrirModalDocumento.classList.add(
+      "text-slate-500",
+      "bg-slate-100",
+      "hover:bg-indigo-50",
+    );
+    labelBtnDocumento.textContent = "CPF/CNPJ";
+    labelBtnDocumento.title = "";
+  }
+}
+
+async function buscarNomePorDocumento(documento) {
+  if (!navigator.onLine) return null;
+  const digitos = documento.replace(/\D/g, "");
+  if (digitos.length !== 11 && digitos.length !== 14) return null;
+
+  try {
+    const { data, error } = await supabaseClient
+      .from("ordens_servico")
+      .select("nome")
+      .eq("documento", documento)
+      .order("id", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+
+    if (error) throw error;
+    if (data && data.nome && data.nome !== "CONSUMIDOR") return data.nome;
+    return null;
+  } catch (err) {
+    console.warn("Erro ao buscar nome por documento:", err);
+    return null;
+  }
+}
+
+if (btnAbrirModalDocumento) {
+  btnAbrirModalDocumento.addEventListener("click", () => {
+    inputDocumentoCliente.value = documentoCliente || "";
+    modalDocumento.classList.add("show");
+    setTimeout(() => {
+      inputDocumentoCliente.focus();
+      inputDocumentoCliente.setSelectionRange(
+        inputDocumentoCliente.value.length,
+        inputDocumentoCliente.value.length,
+      );
+    }, 150);
+  });
+}
+
+if (btnFecharModalDocumento) {
+  btnFecharModalDocumento.addEventListener("click", () =>
+    modalDocumento.classList.remove("show"),
+  );
+}
+
+if (modalDocumento) {
+  modalDocumento.addEventListener("click", (e) => {
+    if (e.target === modalDocumento) modalDocumento.classList.remove("show");
+  });
+}
+
+if (inputDocumentoCliente) {
+  inputDocumentoCliente.addEventListener("input", (e) => {
+    e.target.value = formatarDocumento(e.target.value);
+  });
+}
+
+if (btnSalvarDocumento) {
+  btnSalvarDocumento.addEventListener("click", async () => {
+    const formatado = inputDocumentoCliente.value.trim();
+    const digitos = formatado.replace(/\D/g, "");
+
+    if (digitos.length === 0) {
+      documentoCliente = "";
+      atualizarBotaoDocumento();
+      modalDocumento.classList.remove("show");
+      return;
+    }
+
+    if (digitos.length !== 11 && digitos.length !== 14) {
+      mostrarToast(
+        "Documento inválido. CPF = 11 dígitos, CNPJ = 14 dígitos.",
+        "erro",
+      );
+      return;
+    }
+
+    documentoCliente = formatado;
+    atualizarBotaoDocumento();
+    modalDocumento.classList.remove("show");
+
+    const nomeEncontrado = await buscarNomePorDocumento(formatado);
+    if (nomeEncontrado) {
+      if (!nome.value.trim()) {
+        nome.value = nomeEncontrado;
+        mostrarToast(`Cliente encontrado: ${nomeEncontrado}`, "sucesso");
+        atualizarProgresso();
+      } else if (
+        confirm(
+          `Documento encontrado para "${nomeEncontrado}". Deseja substituir o nome atual?`,
+        )
+      ) {
+        nome.value = nomeEncontrado;
+        atualizarProgresso();
+      }
+    } else {
+      mostrarToast(
+        "Documento salvo. Nenhum cadastro anterior encontrado.",
+        "sucesso",
+      );
+    }
+  });
+}
+
+atualizarBotaoDocumento();
+
+/* =========================================================
    MODAL DE ADICIONAR SERVIÇO
    ========================================================= */
-
 const btnAdicionarItem = document.getElementById("btnAdicionarItem");
 const containerItens = document.getElementById("containerItensAdicionados");
 const modalAdicionar = document.getElementById("modalAdicionarServico");
-const modalSelectServicoContainer =
-  document.getElementById("modalSelectServico");
-
 const modalGrupoCor = document.getElementById("modalGrupoCor");
 const modalInputCor = document.getElementById("modalInputCor");
 const modalGrupoNumero = document.getElementById("modalGrupoNumero");
@@ -142,10 +330,13 @@ const modalInputPlaca = document.getElementById("modalInputPlaca");
 const modalInputNumero = document.getElementById("modalInputNumero");
 const modalInputQtd = document.getElementById("modalInputQtd");
 const modalInputValor = document.getElementById("modalInputValor");
+const modalGrupoOutroServico = document.getElementById(
+  "modalGrupoOutroServico",
+);
+const modalInputOutroServico = document.getElementById(
+  "modalInputOutroServico",
+);
 
-/* =========================================================
-   MODAL DE PLACA OPCIONAL
-   ========================================================= */
 const btnAdicionarPlaca = document.getElementById("btnAdicionarPlaca");
 const modalPlacaOpcional = document.getElementById("modalPlacaOpcional");
 const inputPlacaOpcional = document.getElementById("inputPlacaOpcional");
@@ -154,17 +345,12 @@ const btnSalvarPlacaOpcional = document.getElementById(
 );
 const btnFecharModalPlaca = document.getElementById("btnFecharModalPlaca");
 
-/* =========================================================
-   LÓGICA CENTRALIZADA DE PLACA (SINCRONIZAÇÃO)
-   ========================================================= */
 function obterPlacaAtual() {
-  // Retorna a placa do item (se houver) ou a placa avulsa
   return itensOS.find((i) => i.placa)?.placa || placaAvulsa || "";
 }
 
 function atualizarBotaoPlaca() {
   const placa = obterPlacaAtual();
-
   if (placa) {
     btnAdicionarPlaca.innerHTML = `<i class="fa-solid fa-car"></i> ${placa}`;
     btnAdicionarPlaca.classList.remove("bg-slate-200", "text-slate-700");
@@ -187,39 +373,27 @@ function atualizarBotaoPlaca() {
 }
 
 btnAdicionarPlaca.onclick = () => {
-  // Puxa a placa atual para o input (seja ela de um serviço ou avulsa)
   inputPlacaOpcional.value = obterPlacaAtual();
   modalPlacaOpcional.classList.add("show");
   setTimeout(() => inputPlacaOpcional.focus(), 150);
 };
 
-btnFecharModalPlaca.onclick = () => {
-  modalPlacaOpcional.classList.remove("show");
-};
+btnFecharModalPlaca.onclick = () => modalPlacaOpcional.classList.remove("show");
 
 btnSalvarPlacaOpcional.onclick = () => {
   const placaDigitada = inputPlacaOpcional.value.trim().toUpperCase();
   placaAvulsa = placaDigitada;
-
-  // Se o usuário alterou a placa avulsa, atualiza também todos os itens que já tinham placa
-  // (garantindo consistência visual)
   itensOS.forEach((item) => {
-    if (item.placa) {
-      item.placa = placaAvulsa;
-    }
+    if (item.placa) item.placa = placaAvulsa;
   });
-
-  renderizarItensOS(); // Redesenha a lista caso as placas dos itens tenham mudado
-  atualizarBotaoPlaca(); // Atualiza o botão principal
+  renderizarItensOS();
+  atualizarBotaoPlaca();
   modalPlacaOpcional.classList.remove("show");
   atualizarProgresso();
 };
 
-/* =========================================================
-   DROPDOWN CUSTOMIZADO DE SERVIÇO
-   ========================================================= */
 function montarOpcoesDropdownServico() {
-  return opcoesServico.map((item) => {
+  const opcoes = opcoesServico.map((item) => {
     const valorNumerico = Number(item.valor) || 0;
     return {
       value: item.nome,
@@ -227,11 +401,16 @@ function montarOpcoesDropdownServico() {
       extra: valorNumerico > 0 ? formatarValorInput(valorNumerico) : "R$ 0,00",
     };
   });
+  opcoes.push({
+    value: "__OUTRO__",
+    text: "+ Outro serviço (digitar)",
+    extra: "",
+  });
+  return opcoes;
 }
 
 function criarDropdownServicoSeNecessario() {
   const opts = montarOpcoesDropdownServico();
-
   dropdownServico = criarDropdownCustom({
     id: "modalSelectServico",
     name: "servico",
@@ -240,15 +419,10 @@ function criarDropdownServicoSeNecessario() {
     options: opts,
     tema: "dark",
     className: "w-full",
-    onChange: async (val) => {
-      await aoSelecionarServico(val);
-    },
+    onChange: async (val) => await aoSelecionarServico(val),
   });
-
   const atual = document.getElementById("modalSelectServico");
-  if (atual && atual !== dropdownServico) {
-    atual.replaceWith(dropdownServico);
-  }
+  if (atual && atual !== dropdownServico) atual.replaceWith(dropdownServico);
 }
 
 function atualizarValorTotalModal() {
@@ -266,10 +440,19 @@ function atualizarValorTotalModal() {
 
 async function aoSelecionarServico(servNome) {
   const servUpper = (servNome || "").toUpperCase();
-
   modalGrupoCor.classList.add("hidden");
   modalGrupoNumero.classList.add("hidden");
   modalGrupoPlaca.classList.add("hidden");
+  modalGrupoOutroServico.classList.add("hidden");
+
+  if (servNome === "__OUTRO__") {
+    modalInputOutroServico.value = "";
+    modalGrupoOutroServico.classList.remove("hidden");
+    valorUnitarioAtual = 0;
+    atualizarValorTotalModal();
+    setTimeout(() => modalInputOutroServico.focus(), 150);
+    return;
+  }
 
   const itemCat = opcoesServico.find((i) => i.nome === servNome);
   valorUnitarioAtual = itemCat ? itemCat.valor : 0;
@@ -281,13 +464,9 @@ async function aoSelecionarServico(servNome) {
     servUpper.includes("CASTER")
   ) {
     modalGrupoPlaca.classList.remove("hidden");
-
-    // Puxa a placa já existente (seja de item anterior ou do botão avulso)
     const placaExistente = obterPlacaAtual();
-
     if (placaExistente) {
       modalInputPlaca.value = placaExistente;
-      // Não foca se já tem placa
     } else {
       modalInputPlaca.value = "";
       setTimeout(() => modalInputPlaca.focus(), 150);
@@ -298,10 +477,7 @@ async function aoSelecionarServico(servNome) {
     modalInputCor.value = corReforma || "";
     modalInputNumero.value = numeroOSReforma || "";
     setTimeout(() => modalInputCor.focus(), 150);
-
-    if (!numeroOSReforma) {
-      buscarProximoNumero(true, modalInputNumero);
-    }
+    if (!numeroOSReforma) buscarProximoNumero(true, modalInputNumero);
   } else if (
     servUpper === "CONSERTO" ||
     servUpper === "SOLDA" ||
@@ -311,23 +487,18 @@ async function aoSelecionarServico(servNome) {
     modalInputCor.value = "";
     modalInputNumero.value = numeroOSConserto || "";
     setTimeout(() => modalInputNumero.focus(), 150);
-
-    if (!numeroOSConserto) {
-      buscarProximoNumero(false, modalInputNumero);
-    }
+    if (!numeroOSConserto) buscarProximoNumero(false, modalInputNumero);
   }
 }
 
 modalInputValor.addEventListener("input", (e) => {
   if (ignorarMascaraValor) return;
-
   let v = e.target.value.replace(/\D/g, "");
   v = (v / 100).toFixed(2) + "";
   v = v.replace(".", ",");
   v = v.replace(/(\d)(\d{3})(\d{3}),/g, "$1.$2.$3,");
   v = v.replace(/(\d)(\d{3}),/g, "$1.$2,");
   e.target.value = "R$ " + v;
-
   const qtd = parseInt(modalInputQtd.value) || 1;
   const total = parseFloat(v.replace(/\./g, "").replace(",", ".")) || 0;
   valorUnitarioAtual = total / qtd;
@@ -338,41 +509,35 @@ modalInputQtd.addEventListener("input", atualizarValorTotalModal);
 btnAdicionarItem.onclick = () => {
   criarDropdownServicoSeNecessario();
   if (dropdownServico) dropdownServico.value = "";
-
   modalInputQtd.value = "1";
   modalInputValor.value = "";
   valorUnitarioAtual = 0;
   modalInputCor.value = "";
   modalInputNumero.value = "";
   modalInputPlaca.value = "";
+  modalInputOutroServico.value = "";
   modalGrupoCor.classList.add("hidden");
   modalGrupoNumero.classList.add("hidden");
   modalGrupoPlaca.classList.add("hidden");
-
+  modalGrupoOutroServico.classList.add("hidden");
   corReforma = "";
   numeroOSReforma = "";
   numeroOSConserto = "";
-
   modalAdicionar.classList.add("show");
 };
 
 document.getElementById("btnFecharModalAdicionar").onclick = () => {
   modalAdicionar.classList.remove("show");
-  if (dropdownServico && dropdownServico.fechar) {
-    dropdownServico.fechar();
-  }
+  if (dropdownServico && dropdownServico.fechar) dropdownServico.fechar();
 };
 
 async function buscarProximoNumero(isReforma, inputNum) {
   inputNum.placeholder = "Buscando...";
   inputNum.disabled = true;
-
   try {
     let maxNum = isReforma ? 0 : 6142;
-
     if (navigator.onLine) {
       let query = supabaseClient.from("ordens_servico").select("*");
-
       if (isReforma) {
         query = query
           .eq("servico", "REFORMA")
@@ -384,9 +549,7 @@ async function buscarProximoNumero(isReforma, inputNum) {
           .not("numero_os_conserto", "is", null)
           .neq("numero_os_conserto", "");
       }
-
       const { data } = await query;
-
       if (data) {
         data.forEach((item) => {
           const valItem = isReforma ? item.numero_os : item.numero_os_conserto;
@@ -397,7 +560,6 @@ async function buscarProximoNumero(isReforma, inputNum) {
         });
       }
     }
-
     const pendentes = JSON.parse(
       localStorage.getItem("@osfacil_pendentes") || "[]",
     );
@@ -422,19 +584,14 @@ async function buscarProximoNumero(isReforma, inputNum) {
         }
       }
     });
-
     const proximoNum = isReforma
       ? maxNum + 1
       : maxNum >= 6143
         ? maxNum + 1
         : Math.max(6143, maxNum + 1);
     inputNum.value = proximoNum.toString();
-
-    if (isReforma) {
-      numeroOSReforma = inputNum.value;
-    } else {
-      numeroOSConserto = inputNum.value;
-    }
+    if (isReforma) numeroOSReforma = inputNum.value;
+    else numeroOSConserto = inputNum.value;
   } catch (err) {
     console.error("Erro ao buscar próximo número da OS", err);
   } finally {
@@ -444,10 +601,20 @@ async function buscarProximoNumero(isReforma, inputNum) {
 }
 
 document.getElementById("btnConfirmarItem").onclick = () => {
-  const serv = dropdownServico ? dropdownServico.value : "";
+  let serv = dropdownServico ? dropdownServico.value : "";
   if (!serv) {
     mostrarToast("Selecione um serviço antes de adicionar.", "erro");
     return;
+  }
+
+  if (serv === "__OUTRO__") {
+    const outroTexto = modalInputOutroServico.value.trim().toUpperCase();
+    if (!outroTexto) {
+      mostrarToast("Digite o nome do serviço.", "erro");
+      modalInputOutroServico.focus();
+      return;
+    }
+    serv = outroTexto;
   }
 
   const qtd = parseInt(modalInputQtd.value) || 1;
@@ -472,15 +639,9 @@ document.getElementById("btnConfirmarItem").onclick = () => {
   }
 
   if (isAlinhamento) {
-    // Se digitou algo no input, usa. Se estava vazio mas tinha placa avulsa, usa a avulsa.
     placaVeiculo =
       modalInputPlaca.value.trim().toUpperCase() || placaAvulsa || "";
-
-    // Sincroniza a placa avulsa se foi digitada aqui pela primeira vez
-    if (placaVeiculo && !placaAvulsa) {
-      placaAvulsa = placaVeiculo;
-    }
-
+    if (placaVeiculo && !placaAvulsa) placaAvulsa = placaVeiculo;
     corReforma = "";
     numeroOSReforma = "";
     numeroOSConserto = "";
@@ -512,19 +673,17 @@ document.getElementById("btnConfirmarItem").onclick = () => {
   });
 
   renderizarItensOS();
-  atualizarBotaoPlaca(); // Sincroniza o visual do botão caso o alinhamento tenha definido uma placa
+  atualizarBotaoPlaca();
   atualizarProgresso();
   modalAdicionar.classList.remove("show");
 };
 
 function renderizarItensOS() {
   containerItens.innerHTML = "";
-
   if (itensOS.length === 0) {
     containerItens.innerHTML = `<p class="text-[11px] text-slate-400 italic text-center py-1">Nenhum serviço adicionado ainda.</p>`;
     return;
   }
-
   itensOS.forEach((item, index) => {
     const div = document.createElement("div");
     div.className =
@@ -548,19 +707,11 @@ function renderizarItensOS() {
 
 window.removerItemOS = function (index) {
   itensOS.splice(index, 1);
-
-  // Se o item removido era o único que segurava a placa, verificamos se precisamos limpar
   if (itensOS.length === 0) {
-    // Se a lista ficou vazia, a placa avulsa continua (pois ela é independente)
-    // mas o botão precisa ser atualizado para refletir a verdade atual
   } else {
     const temPlacaAlgumItem = itensOS.some((i) => i.placa);
-    if (!temPlacaAlgumItem && !placaAvulsa) {
-      // Se nenhum item tem placa e não tem avulsa, limpa tudo
-      placaAvulsa = "";
-    }
+    if (!temPlacaAlgumItem && !placaAvulsa) placaAvulsa = "";
   }
-
   renderizarItensOS();
   atualizarBotaoPlaca();
   atualizarProgresso();
@@ -624,9 +775,7 @@ function mostrarToast(mensagem, tipo = "sucesso") {
   toast.className = `${bgColor} text-white px-4 py-3 rounded-lg shadow-lg flex items-center gap-3 mb-2 transition-all duration-300 transform -translate-y-10 opacity-0 font-medium text-sm pointer-events-auto w-full max-w-[400px]`;
   toast.innerHTML = `<i class="fa-solid ${icone} text-lg"></i><span>${mensagem}</span>`;
   container.appendChild(toast);
-  setTimeout(() => {
-    toast.classList.remove("-translate-y-10", "opacity-0");
-  }, 10);
+  setTimeout(() => toast.classList.remove("-translate-y-10", "opacity-0"), 10);
   setTimeout(() => {
     toast.classList.add("-translate-y-10", "opacity-0");
     setTimeout(() => toast.remove(), 300);
@@ -670,13 +819,11 @@ function renderFotos() {
               resultType: "dataUrl",
               source: "CAMERA",
             });
-
             const res = await fetch(image.dataUrl);
             const blob = await res.blob();
             const file = new File([blob], `foto_${Date.now()}.jpeg`, {
               type: "image/jpeg",
             });
-
             fotos.push({ arquivo: file, url: image.dataUrl });
             renderFotos();
             validarFotos();
@@ -690,11 +837,9 @@ function renderFotos() {
           input.type = "file";
           input.accept = "image/*";
           input.capture = "environment";
-
           input.onchange = async (event) => {
             const file = event.target.files[0];
             if (!file) return;
-
             try {
               const arquivoLeve = await comprimirImagemWeb(file);
               fotos.push({
@@ -730,23 +875,20 @@ function aplicarMascaraTelefone() {
     atualizarProgresso();
     return;
   }
-
   if (paisDDI.value === "+55") {
     numero = numero.slice(0, 11);
-    if (numero.length > 10) {
+    if (numero.length > 10)
       numero = numero.replace(/^(\d{2})(\d{5})(\d{4})$/, "($1) $2-$3");
-    } else if (numero.length > 6) {
+    else if (numero.length > 6)
       numero = numero.replace(/^(\d{2})(\d{4})(\d{0,4})$/, "($1) $2-$3");
-    } else if (numero.length > 2) {
+    else if (numero.length > 2)
       numero = numero.replace(/^(\d{2})(\d+)/, "($1) $2");
-    }
   } else {
     numero = numero.slice(0, 9);
-    if (numero.length > 6) {
+    if (numero.length > 6)
       numero = numero.replace(/^(\d{3})(\d{3})(\d{0,3})$/, "($1) $2-$3");
-    } else if (numero.length > 3) {
+    else if (numero.length > 3)
       numero = numero.replace(/^(\d{3})(\d+)/, "($1) $2");
-    }
   }
   telefone.value = numero;
   validarTelefone();
@@ -768,18 +910,16 @@ function validarNome() {
 function validarTelefone() {
   const digitos = telefone.value.replace(/\D/g, "");
   let valido = true;
-  if (digitos.length > 0) {
+  if (digitos.length > 0)
     valido =
       paisDDI.value === "+55"
         ? digitos.length === 10 || digitos.length === 11
         : digitos.length === 9;
-  }
   telefone.classList.toggle("is-invalid", !valido && digitos.length > 0);
   telefone.classList.toggle("is-valid", valido && digitos.length > 0);
   const icone = document.getElementById("statusTelefone");
-  if (icone) {
+  if (icone)
     icone.style.display = valido && digitos.length > 0 ? "block" : "none";
-  }
   return valido;
 }
 
@@ -790,13 +930,7 @@ function validarServico() {
 }
 
 function validarObservacao() {
-  const valido = observacao.value.trim().length >= 3;
-  observacao.classList.toggle(
-    "is-invalid",
-    !valido && observacao.value.length > 0,
-  );
-  observacao.classList.toggle("is-valid", valido);
-  return valido;
+  return true;
 }
 
 function validarFotos() {
@@ -823,6 +957,7 @@ nome.addEventListener("input", () => {
   validarNome();
   atualizarProgresso();
 });
+
 observacao.addEventListener("input", () => {
   validarObservacao();
   atualizarProgresso();
@@ -870,27 +1005,22 @@ form.addEventListener("submit", async (event) => {
   const corGeral = itensOS.find((i) => i.cor)?.cor;
 
   let observacaoFinal = "";
-  if (servicosResumo && textoDigitado) {
+  if (servicosResumo && textoDigitado)
     observacaoFinal = `SERVIÇOS: ${servicosResumo} - ${textoDigitado}`;
-  } else if (servicosResumo) {
-    observacaoFinal = `SERVIÇOS: ${servicosResumo}`;
-  } else {
-    observacaoFinal = textoDigitado;
-  }
+  else if (servicosResumo) observacaoFinal = `SERVIÇOS: ${servicosResumo}`;
+  else observacaoFinal = textoDigitado;
 
   const detalhesExtras = [];
   if (placaGeral) detalhesExtras.push(`PLACA: ${placaGeral}`);
   if (corGeral) detalhesExtras.push(`COR: ${corGeral}`);
-
-  if (detalhesExtras.length > 0) {
+  if (detalhesExtras.length > 0)
     observacaoFinal += ` | ${detalhesExtras.join(" | ")}`;
-  }
 
   const valorTotalGeral = itensOS.reduce((soma, i) => soma + i.valor, 0);
   const qtdTotalGeral = itensOS.reduce((soma, i) => soma + i.quantidade, 0);
-
   const uuidLocal = gerarUUID();
 
+  // 🔥 AQUI ESTÁ A MUDANÇA: SEPARANDO O QUE É SERVIÇO DO QUE É MANUAL
   const cadastro = {
     uuid_local: uuidLocal,
     nome: nomeFinal,
@@ -899,13 +1029,15 @@ form.addEventListener("submit", async (event) => {
     quantidade: qtdTotalGeral,
     valor: valorTotalGeral,
     itens_servicos: itensOS,
-    observacao: observacaoFinal,
+    observacao: `SERVIÇOS: ${servicosResumo}` || null, // Salva a lista automática
+    observacao_manual: textoDigitado || null, // Salva apenas o que o usuário digitou
     aparelho: nomeAparelho || "Aparelho Desconhecido",
     cor: itensOS.find((i) => i.cor)?.cor || null,
     placa: itensOS.find((i) => i.placa)?.placa || placaAvulsa || null,
     numero_os: itensOS.find((i) => i.numero_os)?.numero_os || null,
     numero_os_conserto:
       itensOS.find((i) => i.numero_os_conserto)?.numero_os_conserto || null,
+    documento: documentoCliente || null,
   };
 
   const arquivosFotos = fotos.map((f) => f.arquivo);
@@ -914,7 +1046,6 @@ form.addEventListener("submit", async (event) => {
     if (navigator.onLine) {
       submitButton.innerHTML =
         '<i class="fa-solid fa-spinner fa-spin"></i> ENVIANDO...';
-
       let urlsDasFotos = [];
       for (const arquivo of arquivosFotos) {
         const nomeArquivo = `${Date.now()}-${Math.random().toString(36).substring(2)}.jpeg`;
@@ -927,40 +1058,37 @@ form.addEventListener("submit", async (event) => {
           .getPublicUrl(nomeArquivo);
         urlsDasFotos.push(urlData.publicUrl);
       }
-
       const cadastroFinal = { ...cadastro, fotos_urls: urlsDasFotos };
-
       const { error } = await supabaseClient
         .from("ordens_servico")
         .insert([cadastroFinal]);
       if (error) throw error;
-
       mostrarToast("Pré-cadastro enviado com sucesso!", "sucesso");
     } else {
       await salvarOSOffline(cadastro, arquivosFotos);
       mostrarToast("Sem internet. Salvo no celular com segurança!", "sucesso");
     }
 
+    // RESET
     form.reset();
     itensOS = [];
     renderizarItensOS();
     paisDDI.value = "+55";
     btnDDI.innerHTML = "🇧🇷 +55";
     telefone.placeholder = "(00) 00000-0000";
-
     corReforma = "";
     placaVeiculo = "";
     numeroOSReforma = "";
     numeroOSConserto = "";
-
     placaAvulsa = "";
-    atualizarBotaoPlaca(); // Reseta o botão visualmente
-
+    atualizarBotaoPlaca();
+    documentoCliente = "";
+    atualizarBotaoDocumento();
     modalInputCor.value = "";
     modalInputNumero.value = "";
     modalInputPlaca.value = "";
+    modalInputOutroServico.value = "";
     valorUnitarioAtual = 0;
-
     fotos = [];
     renderFotos();
     photoSection.classList.remove("has-error");
@@ -982,13 +1110,14 @@ form.addEventListener("submit", async (event) => {
     placaVeiculo = "";
     numeroOSReforma = "";
     numeroOSConserto = "";
-
     placaAvulsa = "";
-    atualizarBotaoPlaca(); // Reseta o botão visualmente
-
+    atualizarBotaoPlaca();
+    documentoCliente = "";
+    atualizarBotaoDocumento();
     modalInputCor.value = "";
     modalInputNumero.value = "";
     modalInputPlaca.value = "";
+    modalInputOutroServico.value = "";
     valorUnitarioAtual = 0;
     fotos = [];
     renderFotos();
@@ -1002,10 +1131,8 @@ form.addEventListener("submit", async (event) => {
   }
 });
 
-document.getElementById("btnFecharPesquisa").onclick = () => {
+document.getElementById("btnFecharPesquisa").onclick = () =>
   document.getElementById("modalPesquisa").classList.add("hidden");
-};
-
 let timeoutBusca = null;
 document.getElementById("inputBusca").addEventListener("input", executarBusca);
 
@@ -1033,13 +1160,8 @@ async function executarBusca() {
           .select("*")
           .order("id", { ascending: false })
           .limit(20);
-
-        if (!isNaN(termo)) {
-          query = query.eq("id", parseInt(termo));
-        } else {
-          query = query.ilike("nome", `%${termo}%`);
-        }
-
+        if (!isNaN(termo)) query = query.eq("id", parseInt(termo));
+        else query = query.ilike("nome", `%${termo}%`);
         const { data, error } = await query;
         if (!error && data) {
           ordens = data.map((item) => ({
@@ -1052,20 +1174,18 @@ async function executarBusca() {
         console.error("Erro ao buscar no Supabase", e);
       }
     }
-
     const pendentes = JSON.parse(
       localStorage.getItem("@osfacil_pendentes") || "[]",
     );
     pendentes.forEach((p) => {
       const matchNome = p.dados.nome && p.dados.nome.includes(termo);
       const matchId = p.idTemp.toString().includes(termo);
-      if (matchNome || matchId) {
+      if (matchNome || matchId)
         ordens.push({
           id: `Local #${p.idTemp}`,
           dados: p.dados,
           fotosUrls: p.fotos.map((f) => f.base64),
         });
-      }
     });
 
     if (ordens.length === 0) {
@@ -1079,7 +1199,6 @@ async function executarBusca() {
       const card = document.createElement("div");
       card.className =
         "bg-white border border-slate-200 rounded-xl p-3 shadow-sm flex flex-col gap-2";
-
       let fotosHtml = "";
       if (os.fotosUrls && os.fotosUrls.length > 0) {
         fotosHtml = `<div class="flex gap-1.5 overflow-x-auto py-1">`;
@@ -1094,19 +1213,15 @@ async function executarBusca() {
       } else {
         fotosHtml = `<span class="text-[10px] text-slate-400 italic">Sem fotos registradas.</span>`;
       }
-
       const telefoneExibir =
         d.telefone && d.telefone.trim() !== "+55" && d.telefone.trim() !== ""
           ? d.telefone
           : "Sem contato";
-
       let extraDetalhes = "";
-      if (d.cor || d.numero_os) {
+      if (d.cor || d.numero_os)
         extraDetalhes += `<div class="flex gap-3">${d.cor ? `<div><strong>Cor:</strong> ${d.cor}</div>` : ""} ${d.numero_os ? `<div><strong>Nº OS:</strong> ${d.numero_os}</div>` : ""}</div>`;
-      }
-      if (d.numero_os_conserto) {
+      if (d.numero_os_conserto)
         extraDetalhes += `<div class="flex gap-3"><div><strong>Nº OS Conserto:</strong> ${d.numero_os_conserto}</div></div>`;
-      }
 
       card.innerHTML = `
         <div class="flex items-center justify-between border-b border-slate-100 pb-1.5">
@@ -1118,7 +1233,7 @@ async function executarBusca() {
           <div><strong>Telefone:</strong> ${telefoneExibir}</div>
           <div><strong>Valor:</strong> R$ ${Number(d.valor).toFixed(2).replace(".", ",")}</div>
           ${extraDetalhes}
-          <div><strong>Obs:</strong> ${d.observacao}</div>
+          <div><strong>Obs:</strong> ${d.observacao_manual || d.observacao || "-"}</div>
         </div>
         <div class="mt-1">
           <span class="text-[10px] font-bold text-slate-500 block mb-1">Imagens do Serviço:</span>
@@ -1127,7 +1242,6 @@ async function executarBusca() {
       `;
       listaResultados.appendChild(card);
     });
-
     document.querySelectorAll(".img-mini").forEach((imgEl) => {
       imgEl.onclick = () => {
         const galeria = JSON.parse(imgEl.getAttribute("data-galeria"));
@@ -1145,9 +1259,8 @@ function abrirModalImagens(arrayFotos, indexInicial) {
   atualizarCarrossel();
 }
 
-document.getElementById("btnFecharImagens").onclick = () => {
+document.getElementById("btnFecharImagens").onclick = () =>
   document.getElementById("modalImagens").classList.add("hidden");
-};
 document.getElementById("btnPrev").onclick = () => navegarImagem(-1);
 document.getElementById("btnNext").onclick = () => navegarImagem(1);
 
@@ -1163,14 +1276,12 @@ function atualizarCarrossel() {
   const contador = document.getElementById("contadorFotoModal");
   const btnPrev = document.getElementById("btnPrev");
   const btnNext = document.getElementById("btnNext");
-
   img.style.opacity = 0;
   setTimeout(() => {
     img.src = galeriaAtual[indexFotoAtual];
     contador.textContent = `${indexFotoAtual + 1} / ${galeriaAtual.length}`;
     img.style.opacity = 1;
   }, 150);
-
   if (galeriaAtual.length > 1) {
     btnPrev.classList.remove("hidden");
     btnNext.classList.remove("hidden");
@@ -1182,7 +1293,7 @@ function atualizarCarrossel() {
 
 carregarServicosFormulario().then(() => {
   renderFotos();
-  atualizarBotaoPlaca(); // Garante que o botão comece no estado correto
+  atualizarBotaoPlaca();
   atualizarProgresso();
 });
 

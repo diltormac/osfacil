@@ -69,6 +69,64 @@
       </div>
     </div>
 
+    <!-- MODAL DE CADASTRO DE DOCUMENTO (CPF / CNPJ) -->
+    <div id="modalDocumento" class="modal-custom" style="z-index: 1700">
+      <div class="modal-box" onclick="event.stopPropagation()">
+        <div class="modal-header">
+          <span
+            ><i class="fa-solid fa-id-card text-indigo-600 mr-1"></i> Documento
+            do Cliente</span
+          >
+          <button
+            id="btnFecharModalDocumento"
+            style="
+              background: none;
+              border: none;
+              font-size: 20px;
+              color: #94a3b8;
+            "
+          >
+            <i class="fa-solid fa-xmark"></i>
+          </button>
+        </div>
+        <div
+          style="
+            padding: 16px;
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+          "
+        >
+          <div>
+            <label class="field-label">CPF ou CNPJ (Opcional)</label>
+            <input
+              type="text"
+              id="inputDocumentoCliente"
+              class="field"
+              placeholder="Digite o CPF ou CNPJ"
+              maxlength="18"
+              autocomplete="off"
+            />
+          </div>
+        </div>
+        <div
+          style="
+            padding: 16px;
+            border-top: 1px solid #e2e8f0;
+            background: #f8fafc;
+          "
+        >
+          <button
+            id="btnSalvarDocumento"
+            class="submit-button"
+            style="height: 44px; font-size: 14px"
+          >
+            <i class="fa-solid fa-check"></i> Salvar Documento
+          </button>
+        </div>
+      </div>
+    </div>
+
     <!-- MODAL DE ADICIONAR SERVIÇO -->
     <div id="modalAdicionarServico" class="modal-custom" style="z-index: 1600">
       <div class="modal-box" onclick="event.stopPropagation()">
@@ -105,6 +163,20 @@
 
             <!-- ===== Dropdown customizado (substitui <select> + botão do APK) ===== -->
             <div id="modalSelectServico"></div>
+          </div>
+
+          <!-- Campo "Outro serviço" — aparece só quando seleciona OUTRO -->
+          <div id="modalGrupoOutroServico" class="hidden">
+            <label class="field-label"
+              >Digite o nome do serviço <span class="req">*</span></label
+            >
+            <input
+              type="text"
+              id="modalInputOutroServico"
+              class="field"
+              placeholder="Ex: Pintura, Funilaria, etc."
+              autocomplete="off"
+            />
           </div>
 
           <!-- Grupo de Cor (Reforma) -->
@@ -494,11 +566,24 @@
       <main class="app-main">
         <form id="osForm" class="flex min-h-0 flex-1 flex-col gap-2" novalidate>
           <section class="form-card" id="cardCliente">
-            <div class="mb-2 flex items-center gap-2">
-              <i class="fa-solid fa-user text-xs text-indigo-600"></i>
-              <h2 class="text-sm font-bold text-slate-800">Dados do cliente</h2>
-              <span class="field-hint" id="hintCliente">1 de 3</span>
+            <div class="mb-2 flex items-center justify-between">
+              <div class="flex items-center gap-2">
+                <i class="fa-solid fa-user text-xs text-indigo-600"></i>
+                <h2 class="text-sm font-bold text-slate-800">
+                  Dados do cliente
+                </h2>
+              </div>
+              <!-- Botão discreto e visível para abrir o modal de documento -->
+              <button
+                type="button"
+                id="btnAbrirModalDocumento"
+                class="flex items-center gap-1 text-[11px] font-medium text-slate-500 hover:text-indigo-600 bg-slate-100 hover:bg-indigo-50 px-2 py-1 rounded-md transition-colors"
+              >
+                <i class="fa-solid fa-id-card text-[10px]"></i>
+                <span id="labelBtnDocumento">CPF/CNPJ</span>
+              </button>
             </div>
+
             <div class="mb-3">
               <label for="nome" class="field-label"
                 >Nome do cliente (Opcional)</label
@@ -555,7 +640,9 @@
               <i
                 class="fa-solid fa-screwdriver-wrench text-xs text-indigo-600"
               ></i>
-              <h2 class="text-sm font-bold text-slate-800">Dados do serviço</h2>
+              <h2 class="text-sm font-bold text-slate-800">
+                Dados do serviço*
+              </h2>
               <span class="field-hint" id="hintServico">2 de 3</span>
             </div>
 
@@ -588,8 +675,8 @@
 
             <div class="mt-3">
               <label for="observacao" class="field-label"
-                >Descrição do serviço <span class="req">*</span></label
-              >
+                >Descrição do serviço <span class="req"></span
+              ></label>
               <textarea
                 id="observacao"
                 name="observacao"
