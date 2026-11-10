@@ -382,17 +382,13 @@ textarea.field {
   inset: 0;
   background: rgba(0, 0, 0, 0.6);
   z-index: 1000;
-  display: flex;
+  display: none; /* 👈 MUDANÇA AQUI: Esconde totalmente */
   align-items: center;
   justify-content: center;
   padding: 20px;
-  opacity: 0;
-  pointer-events: none;
-  transition: 0.2s;
 }
 .modal-custom.show {
-  opacity: 1;
-  pointer-events: auto;
+  display: flex !important; /* 👈 MUDANÇA AQUI: Força a exibição */
 }
 .modal-box {
   background: white;
@@ -404,8 +400,7 @@ textarea.field {
   flex-direction: column;
   max-height: 80vh;
   box-shadow: 0 20px 40px rgba(0, 0, 0, 0.3);
-  transform: scale(0.95);
-  transition: 0.2s;
+  transform: scale(1); /* Removi a animação de scale que buga no mobile */
 }
 .modal-custom.show .modal-box {
   transform: scale(1);
