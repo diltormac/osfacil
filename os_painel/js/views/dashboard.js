@@ -15,7 +15,6 @@ import {
 } from "../utils.js";
 import { imgFoto } from "./helpers.js";
 import { estadoHTML, estadoCarregando } from "./estados.js";
-import { marcarServicoFinalizado } from "../api.js";
 
 export function renderDashboard() {
   const carregado = dashboardCarregamento === "ok" && resumoDashboard;
@@ -31,7 +30,6 @@ export function renderDashboard() {
     ? resumoDashboard.andamento
     : traco;
 
-  // O número de prontas agora vem direto da contagem do banco de dados (resumoDashboard.prontas)
   document.getElementById("statProntas").textContent = carregado
     ? resumoDashboard.prontas || 0
     : traco;
@@ -170,13 +168,6 @@ export function renderDashboard() {
         </div>
         <div class="flex items-center gap-3 lg:gap-6 mt-3 lg:mt-0 flex-shrink-0 justify-between pl-14 lg:pl-0">
           
-          <!-- BOTÃO PARA MARCAR COMO PRONTO NO DASHBOARD -->
-          <button onclick="event.stopPropagation(); window.alternarProntoDashboard(${o.id}, ${!isPronto})" 
-                  class="w-8 h-8 rounded-full inline-flex items-center justify-center transition border ${isPronto ? "bg-green-100 border-green-300 text-green-600" : "bg-white border-slate-200 text-slate-400 hover:text-green-600 hover:border-green-300"}" 
-                  title="${isPronto ? "Desmarcar Pronto" : "Marcar como Pronto"}">
-            <i class="fa-solid fa-check-double text-sm" aria-hidden="true"></i>
-          </button>
-
           <div class="flex flex-col lg:items-end">
             ${badge(o.status)}
             <div class="flex items-center gap-2 mt-1 flex-wrap lg:justify-end">
@@ -195,8 +186,3 @@ export function renderDashboard() {
     })
     .join("");
 }
-
-// Expõe a função para o HTML (botão do dashboard)
-window.alternarProntoDashboard = (id, novoStatus) => {
-  marcarServicoFinalizado(id, novoStatus);
-};

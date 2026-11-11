@@ -260,7 +260,7 @@ function lerFormulario() {
     "editValor",
     "editObservacao",
     "editObservacaoServicos",
-    "editFormaPagamento", // <-- ADICIONADO AQUI
+    "editFormaPagamento",
   ];
   return JSON.stringify({
     campos: ids.map((id) => document.getElementById(id)?.value ?? ""),
@@ -331,6 +331,14 @@ export async function abrirDetalhes(idOuObjeto) {
     ? os.numero_os_conserto || os.numero_os || ""
     : os.numero_os || "";
 
+  // LÓGICA DO TICK (PRONTO) AO LADO DA OS
+  const isReforma = (os.servico || "").toUpperCase().includes("REFORMA");
+  const isPronto = os.servico_finalizado === true;
+  const tickProntoHTML =
+    isReforma && isPronto
+      ? `<span class="absolute right-10 top-1/2 -translate-y-1/2 text-green-500 text-lg" title="Serviço Pronto p/ Retirada"><i class="fa-solid fa-circle-check"></i></span>`
+      : "";
+
   let textoObsAntiga = os.observacao || "";
   let textoManualSalvo = os.observacao_manual || "";
 
@@ -355,7 +363,7 @@ export async function abrirDetalhes(idOuObjeto) {
     : "Nenhum serviço adicionado.";
 
   document.getElementById("modalBody").innerHTML = `
-           <div class="grid grid-cols-1 sm:grid-cols-3 gap-3 sm:gap-4">
+    <div class="grid grid-cols-1 sm:grid-cols-3 gap-3 sm:gap-4">
       
       <!-- 1. Nº DA VENDA -->
       <div>
@@ -368,13 +376,16 @@ export async function abrirDetalhes(idOuObjeto) {
         </div>
       </div>
 
-      <!-- 2. NÚMERO DA OS -->
+      <!-- 2. NÚMERO DA OS (COM O TICK DE PRONTO) -->
       <div>
         <label for="editNumeroOS" class="text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1 block">
           ${conserto ? "Número da OS (Conserto)" : "Número da OS"}
         </label>
         <div class="relative flex items-center">
-          <input type="text" id="editNumeroOS" maxlength="30" value="${esc(numeroOSExibido)}" class="edit-input font-bold text-indigo-600 pr-10" placeholder="1234" />
+          <input type="text" id="editNumeroOS" maxlength="30" value="${esc(numeroOSExibido)}" class="edit-input font-bold text-indigo-600 pr-16" placeholder="1234" />
+          
+          ${tickProntoHTML}
+          
           <button type="button" onclick="copiarCampo('editNumeroOS')" class="absolute right-2 text-slate-400 hover:text-indigo-600 p-1" title="Copiar Número da OS" aria-label="Copiar número da OS">
             <i class="fa-solid fa-copy text-sm" aria-hidden="true"></i>
           </button>
