@@ -38,9 +38,6 @@ import {
 
 let carregando = false;
 
-/* =========================================================
-   REGRA DE STATUS AUTOMÁTICO (10.000)
-   ========================================================= */
 export const LIMIAR_VENDA = 10000;
 
 export function calcularStatusAutomatico(numeroVenda, maxNumeroVenda) {
@@ -97,7 +94,8 @@ function normalizarOS(item) {
     servico: item.servico || "",
     cor: item.cor || "",
     placa: item.placa || "",
-    forma_pagamento: item.forma_pagamento || "", // <-- NOVO CAMPO AQUI
+    forma_pagamento: item.forma_pagamento || "",
+    servico_finalizado: item.servico_finalizado || false,
     fotos_urls: Array.isArray(item.fotos_urls)
       ? item.fotos_urls.filter(Boolean)
       : [],
@@ -118,6 +116,11 @@ function montarConsultaOS({
     consulta = consulta.eq("status", estado.filtroStatus);
   if (estado.filtroServico && estado.filtroServico !== "all")
     consulta = consulta.ilike("servico", `%${estado.filtroServico}%`);
+
+  // NOVO: Filtro para Prontas p/ Retirada
+  if (estado.filtroFinalizado === "prontas") {
+    consulta = consulta.eq("servico_finalizado", true);
+  }
 
   const termo = estado.busca.trim();
   if (termo) {
@@ -259,11 +262,28 @@ export async function carregarResumoDashboard() {
   if (!supabaseClient) return;
   setDashboardCarregamento("carregando");
   try {
+    // 1. Busca os totais normais
     const { data, error } = await executarConsulta(
       supabaseClient.rpc("resumo_os"),
     );
     if (error) throw error;
-    setResumoDashboard(data || null);
+
+    let resumo = data || {};
+
+    // 2. Busca a contagem exata de quantas OS estão marcadas como "Prontas"
+    const { count: totalProntas, error: errorProntas } = await executarConsulta(
+      supabaseClient
+        .from("ordens_servico")
+        .select("*", { count: "exact", head: true })
+        .eq("servico_finalizado", true),
+    );
+
+    if (!errorProntas) {
+      // Adiciona a contagem exata ao objeto resumo
+      resumo.prontas = totalProntas || 0;
+    }
+
+    setResumoDashboard(resumo);
     setDashboardCarregamento("ok");
     setDashboardMensagemErro("");
   } catch (error) {
@@ -434,7 +454,6 @@ export async function salvarEdicoes(id) {
     .toUpperCase();
   const novoValor = lerValor(document.getElementById("editValor").value);
 
-  // 🔥 NOVO CAMPO FORMA DE PAGAMENTO
   const formaPagamento =
     document.getElementById("editFormaPagamento")?.value || "";
 
@@ -491,9 +510,6 @@ export async function salvarEdicoes(id) {
     );
   }
 
-  /* =========================================================
-     LÓGICA DE STATUS SILENCIOSA
-     ========================================================= */
   const statusManualSelecionado =
     document.getElementById("editStatus").value || "Pendente";
 
@@ -540,7 +556,7 @@ export async function salvarEdicoes(id) {
     servico: servicoResumo,
     quantidade: quantidadeResumo,
     numero_venda: inputVendaVal || null,
-    forma_pagamento: formaPagamento || null, // <-- SALVANDO NOVO CAMPO
+    forma_pagamento: formaPagamento || null,
   };
 
   if (ehConsertoOuSolda(osAtual))
@@ -581,6 +597,28 @@ export async function salvarEdicoes(id) {
     toast(mensagemErro(error, "salvar as alterações"), "error");
     destravar();
     if (btnExcluir) btnExcluir.disabled = false;
+  }
+}
+
+// NOVO: FUNÇÃO PARA MARCAR SERVIÇO FINALIZADO DIRETO PELA LISTA
+export async function marcarServicoFinalizado(id, status) {
+  try {
+    if (!supabaseClient) throw new Error("Failed to fetch");
+    const { error } = await supabaseClient
+      .from("ordens_servico")
+      .update({ servico_finalizado: status })
+      .eq("id", id);
+    if (error) throw error;
+
+    const os = listaOS.find((o) => o.id === id);
+    if (os) os.servico_finalizado = status;
+
+    toast(status ? "Serviço marcado como PRONTO!" : "Serviço reaberto!");
+    recarregarListaOS();
+    carregarUltimasOS();
+  } catch (error) {
+    console.error(error);
+    toast("Erro ao atualizar o status do serviço.", "error");
   }
 }
 

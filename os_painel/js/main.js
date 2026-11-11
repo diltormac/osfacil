@@ -79,6 +79,34 @@ function mudarView(view) {
   fecharSidebar();
 }
 
+/* ---------- FUNÇÃO PARA FILTRAR PELO CLIQUE NOS CARDS ---------- */
+window.filtrarPorCard = function (filtro) {
+  // Reseta filtros anteriores
+  estado.filtroStatus = "all";
+  estado.filtroFinalizado = "all";
+
+  // Reseta visual dos botões de filtro
+  document
+    .querySelectorAll(".filter-btn")
+    .forEach((b) => b.classList.remove("active"));
+
+  if (filtro === "prontas") {
+    estado.filtroFinalizado = "prontas";
+    const btnTodas = document.querySelector('.filter-btn[data-status="all"]');
+    if (btnTodas) btnTodas.classList.add("active");
+  } else {
+    estado.filtroStatus = filtro;
+    const btnMatch = document.querySelector(
+      `.filter-btn[data-status="${filtro}"]`,
+    );
+    if (btnMatch) btnMatch.classList.add("active");
+  }
+
+  // Vai para a tela de OS e recarrega
+  mudarView("os");
+  recarregarListaOS();
+};
+
 /* ---------- EXPÕE FUNÇÕES USADAS EM onclick DO HTML ---------- */
 Object.assign(window, {
   alternarFaturamento,
@@ -131,6 +159,7 @@ document.querySelectorAll(".sidebar-link[data-view]").forEach((el) => {
 document.querySelectorAll(".sidebar-link[data-filter]").forEach((el) => {
   el.addEventListener("click", () => {
     estado.filtroStatus = el.dataset.filter;
+    estado.filtroFinalizado = "all";
     document
       .querySelectorAll(".filter-btn")
       .forEach((b) => b.classList.remove("active"));
@@ -150,6 +179,7 @@ document.querySelectorAll(".filter-btn").forEach((btn) => {
       .forEach((b) => b.classList.remove("active"));
     btn.classList.add("active");
     estado.filtroStatus = btn.dataset.status;
+    estado.filtroFinalizado = "all";
     recarregarListaOS();
   });
 });

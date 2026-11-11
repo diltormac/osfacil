@@ -13,6 +13,7 @@ import {
   estadoErro,
   semDadosPorCarregamento,
 } from "./estados.js";
+import { marcarServicoFinalizado } from "../api.js";
 
 function definirEstadoListaOS(html) {
   const empty = document.getElementById("emptyState");
@@ -92,10 +93,16 @@ export function renderOS() {
             0,
           )}</div>`
         : "";
+
+      // NOVO: Lógica para exibir o badge "Pronto"
+      const isPronto = o.servico_finalizado;
+      const tagPronto = isPronto
+        ? `<span class="ml-2 text-[9px] font-bold bg-green-100 text-green-700 px-1.5 py-0.5 rounded border border-green-300 whitespace-nowrap"><i class="fa-solid fa-check-double text-[8px] mr-1"></i>PRONTO</span>`
+        : "";
+
       return `
-      <tr class="table-row align-top hover:bg-slate-50 transition-colors">
+      <tr class="table-row align-top hover:bg-slate-50 transition-colors ${isPronto ? "bg-green-50/30" : ""}">
         
-        <!-- COLUNA DO Nº DA VENDA / ID -->
         <td class="px-3 py-3 whitespace-nowrap">
           <div class="flex flex-col">
             ${
@@ -113,7 +120,10 @@ export function renderOS() {
               foto ||
               `<div class="w-7 h-7 rounded-full bg-slate-100 flex items-center justify-center text-xs font-bold text-slate-600 flex-shrink-0 mt-0.5" aria-hidden="true">${iniciais(o.nome)}</div>`
             }
-            <span class="text-sm font-semibold text-slate-800 break-words leading-tight tracking-tight" title="${esc(o.nome)}">${esc(o.nome) || '<span class="text-slate-400 italic font-medium">Sem nome</span>'}</span>
+            <div class="flex flex-col">
+              <span class="text-sm font-semibold text-slate-800 break-words leading-tight tracking-tight" title="${esc(o.nome)}">${esc(o.nome) || '<span class="text-slate-400 italic font-medium">Sem nome</span>'}</span>
+              ${tagPronto}
+            </div>
           </div>
         </td>
         
@@ -134,7 +144,13 @@ export function renderOS() {
         <td class="px-3 py-3 text-center whitespace-nowrap">${badge(o.status)}</td>
         
         <td class="px-3 py-3 text-right whitespace-nowrap">
-          <button onclick="abrirDetalhes(${o.id})" class="w-7 h-7 rounded-lg hover:bg-slate-200 text-slate-600 inline-flex items-center justify-center transition" title="Ver / Editar" aria-label="Editar OS de ${esc(o.nome) || "cliente sem nome"}">
+          <!-- BOTÃO PARA MARCAR COMO PRONTO NA TABELA -->
+          <button onclick="event.stopPropagation(); window.alternarPronto(${o.id}, ${!isPronto})" 
+                  class="w-7 h-7 rounded-lg inline-flex items-center justify-center transition ${isPronto ? "text-green-600 hover:bg-green-100" : "text-slate-400 hover:text-green-600 hover:bg-green-50"}" 
+                  title="${isPronto ? "Desmarcar Pronto" : "Marcar como Pronto"}">
+            <i class="fa-solid fa-check-double text-sm" aria-hidden="true"></i>
+          </button>
+          <button onclick="abrirDetalhes(${o.id})" class="w-7 h-7 rounded-lg hover:bg-slate-200 text-slate-600 inline-flex items-center justify-center transition ml-1" title="Ver / Editar" aria-label="Editar OS de ${esc(o.nome) || "cliente sem nome"}">
             <i class="fa-solid fa-pen-to-square text-sm" aria-hidden="true"></i>
           </button>
         </td>
@@ -154,9 +170,18 @@ export function renderOS() {
             0,
           )}</div>`
         : "";
+
+      const isPronto = o.servico_finalizado;
+      const corCard = isPronto
+        ? "border-green-400 shadow-green-100"
+        : "border-slate-200";
+
       return `
-      <div class="bg-white border border-slate-200 rounded-2xl p-4 active:bg-slate-50 transition cursor-pointer" onclick="abrirDetalhes(${o.id})">
-        <div class="flex items-start justify-between gap-3 mb-3">
+      <div class="bg-white border ${corCard} rounded-2xl p-4 active:bg-slate-50 transition cursor-pointer shadow-sm relative overflow-hidden" onclick="abrirDetalhes(${o.id})">
+        
+        ${isPronto ? `<div class="absolute top-0 right-0 bg-green-500 text-white text-[9px] font-bold px-2 py-0.5 rounded-bl-lg"><i class="fa-solid fa-check-double mr-1"></i>PRONTO</div>` : ""}
+
+        <div class="flex items-start justify-between gap-3 mb-3 mt-1">
           <div class="flex items-center gap-2.5 min-w-0 flex-1">
             ${
               foto ||
@@ -168,8 +193,7 @@ export function renderOS() {
             </div>
           </div>
           
-          <!-- BADGE DO Nº DA VENDA / ID NO MOBILE -->
-          <div class="flex flex-col items-end flex-shrink-0">
+          <div class="flex flex-col items-end flex-shrink-0 pr-6">
             ${
               o.numero_venda
                 ? `<span class="text-[10px] font-bold text-emerald-700 bg-emerald-50 px-2 py-1 rounded-md" title="Nº da Venda">Venda: ${esc(o.numero_venda)}</span>
@@ -177,7 +201,6 @@ export function renderOS() {
                 : `<span class="text-[10px] font-bold text-indigo-600 bg-indigo-50 px-2 py-1 rounded-md">${esc(numeroExibicao(o))}</span>`
             }
           </div>
-          
         </div>
 
         <div class="flex flex-wrap gap-2 mb-3">
@@ -218,3 +241,10 @@ export function renderOS() {
     })
     .join("");
 }
+
+// Expõe a função para o HTML (botão da tabela)
+window.alternarPronto = (id, novoStatus) => {
+  import("../api.js").then(({ marcarServicoFinalizado }) => {
+    marcarServicoFinalizado(id, novoStatus);
+  });
+};
