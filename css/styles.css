@@ -534,6 +534,20 @@ textarea.field {
     border-top-color: #334155 !important;
   }
 
+  /* Ajuste para o Toggle no Modo Escuro */
+  .bg-slate-100 {
+    background-color: #1e293b !important;
+  }
+  .text-slate-700 {
+    color: #cbd5e1 !important;
+  }
+  .peer-checked\:bg-indigo-600:checked ~ div {
+    background-color: #435edb !important;
+  }
+  .bg-slate-300 {
+    background-color: #475569 !important;
+  }
+
   /* ---------- CUSTOM DROPDOWN SCROLLBAR ---------- */
   .custom-dropdown-list::-webkit-scrollbar {
     width: 6px;

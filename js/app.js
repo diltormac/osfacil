@@ -49,6 +49,91 @@ const CATALOGO_SERVICOS_FALLBACK = [
   { nome: "Reforma", valor: 200 },
 ];
 
+function aplicarLogicaPlaca(idInput, idToggle) {
+  const inputElement = document.getElementById(idInput);
+  const toggleElement = document.getElementById(idToggle);
+
+  if (!inputElement) return;
+
+  const padraoMercosul = ["L", "L", "L", "N", "L", "N", "N"];
+  const padraoAntigo = ["L", "L", "L", "N", "N", "N", "N"];
+
+  function aplicarMascara(e) {
+    // 1. Verifica o estado do Toggle
+    const usarMercosul = toggleElement ? toggleElement.checked : true;
+
+    // Se o Toggle estiver DESATIVADO (Modo Livre / Antigo)
+    if (!usarMercosul) {
+      // Permite letras e números, converte para maiúsculo, mas NÃO bloqueia nada.
+      e.target.value = e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, "");
+      // Garante que o teclado do celular permita letras e números (modo texto)
+      e.target.inputMode = "text";
+      return; // Para a execução aqui
+    }
+
+    // 2. Se o Toggle estiver ATIVADO (Padrão Mercosul)
+    let valor = e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, "");
+    let formatado = "";
+    const regraAtual = padraoMercosul;
+
+    for (let i = 0; i < valor.length && i < regraAtual.length; i++) {
+      const char = valor[i];
+      const tipoEsperado = regraAtual[i];
+
+      if (tipoEsperado === "L" && /[A-Z]/.test(char)) {
+        formatado += char;
+      } else if (tipoEsperado === "N" && /[0-9]/.test(char)) {
+        formatado += char;
+      } else {
+        break; // Bloqueia se não for do tipo esperado
+      }
+    }
+
+    e.target.value = formatado;
+
+    // Alterna o teclado (inputmode)
+    const proximaPosicao = formatado.length;
+    if (proximaPosicao < regraAtual.length) {
+      const proximoTipo = regraAtual[proximaPosicao];
+      e.target.inputMode = proximoTipo === "L" ? "text" : "numeric";
+    } else {
+      e.target.inputMode = "text";
+    }
+  }
+
+  inputElement.addEventListener("input", aplicarMascara);
+
+  // Trata o Backspace para atualizar o teclado
+  inputElement.addEventListener("keydown", (e) => {
+    if (e.key === "Backspace") {
+      setTimeout(() => {
+        aplicarMascara({ target: inputElement });
+      }, 10);
+    }
+  });
+
+  // Se o Toggle mudar, limpa o campo e altera o placeholder
+  if (toggleElement) {
+    toggleElement.addEventListener("change", () => {
+      inputElement.value = "";
+      inputElement.inputMode = "text"; // Sempre volta pro texto ao trocar
+      inputElement.placeholder = toggleElement.checked
+        ? "Ex: ABC1D23"
+        : "Ex: ABC1234 ou Livre";
+      inputElement.focus();
+    });
+  }
+}
+
+// Inicializa as máscaras quando o DOM estiver pronto
+document.addEventListener("DOMContentLoaded", () => {
+  aplicarLogicaPlaca("inputPlacaOpcional", "togglePadraoPlacaOpcional");
+  aplicarLogicaPlaca("modalInputPlaca", "togglePadraoPlacaModal");
+});
+
+// ==========================================
+// FUNÇÕES AUXILIARES
+// ==========================================
 function gerarUUID() {
   return "xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx".replace(/[xy]/g, function (c) {
     var r = (Math.random() * 16) | 0,
@@ -120,9 +205,9 @@ function formatarValorInput(valorNumerico) {
   return "R$ " + v;
 }
 
-/* =========================================================
-   MODAL DE DOCUMENTO (CPF / CNPJ)
-   ========================================================= */
+// ==========================================
+// MODAL DE DOCUMENTO (CPF / CNPJ)
+// ==========================================
 const btnAbrirModalDocumento = document.getElementById(
   "btnAbrirModalDocumento",
 );
@@ -316,9 +401,9 @@ if (btnSalvarDocumento) {
 
 atualizarBotaoDocumento();
 
-/* =========================================================
-   MODAL DE ADICIONAR SERVIÇO
-   ========================================================= */
+// ==========================================
+// MODAL DE ADICIONAR SERVIÇO
+// ==========================================
 const btnAdicionarItem = document.getElementById("btnAdicionarItem");
 const containerItens = document.getElementById("containerItensAdicionados");
 const modalAdicionar = document.getElementById("modalAdicionarServico");
@@ -351,29 +436,27 @@ function obterPlacaAtual() {
 
 function atualizarBotaoPlaca() {
   const placa = obterPlacaAtual();
+
+  // Classes base para manter o formato e o tamanho
+  const baseClasses =
+    "flex-1 h-12 text-xs font-bold rounded-lg transition-colors flex items-center justify-center gap-1.5 shadow-sm";
+
   if (placa) {
+    // Quando tem placa: Verde bem destacado
+    btnAdicionarPlaca.className = `${baseClasses} bg-green-500 hover:bg-green-600 text-white border border-green-600`;
     btnAdicionarPlaca.innerHTML = `<i class="fa-solid fa-car"></i> ${placa}`;
-    btnAdicionarPlaca.classList.remove("bg-slate-200", "text-slate-700");
-    btnAdicionarPlaca.classList.add(
-      "bg-green-100",
-      "text-green-700",
-      "border",
-      "border-green-300",
-    );
   } else {
+    // Quando NÃO tem placa: Azul claro / Índigo com texto escuro e borda (Destaque)
+    btnAdicionarPlaca.className = `${baseClasses} bg-indigo-100 hover:bg-indigo-200 text-indigo-700 border border-indigo-300 dark:bg-indigo-600/20 dark:text-indigo-300 dark:border-indigo-500/50 dark:hover:bg-indigo-600/40`;
     btnAdicionarPlaca.innerHTML = `<i class="fa-solid fa-car"></i> Placa`;
-    btnAdicionarPlaca.classList.add("bg-slate-200", "text-slate-700");
-    btnAdicionarPlaca.classList.remove(
-      "bg-green-100",
-      "text-green-700",
-      "border",
-      "border-green-300",
-    );
   }
 }
-
 btnAdicionarPlaca.onclick = () => {
   inputPlacaOpcional.value = obterPlacaAtual();
+  // Reseta o toggle para Mercosul ao abrir
+  const toggle = document.getElementById("togglePadraoPlacaOpcional");
+  if (toggle) toggle.checked = true;
+  inputPlacaOpcional.placeholder = "Ex: ABC1D23";
   modalPlacaOpcional.classList.add("show");
   setTimeout(() => inputPlacaOpcional.focus(), 150);
 };
@@ -464,11 +547,17 @@ async function aoSelecionarServico(servNome) {
     servUpper.includes("CASTER")
   ) {
     modalGrupoPlaca.classList.remove("hidden");
+
+    // Reseta o toggle de placa do modal para Mercosul
+    const toggleModal = document.getElementById("togglePadraoPlacaModal");
+    if (toggleModal) toggleModal.checked = true;
+
     const placaExistente = obterPlacaAtual();
     if (placaExistente) {
       modalInputPlaca.value = placaExistente;
     } else {
       modalInputPlaca.value = "";
+      modalInputPlaca.placeholder = "Ex: ABC1D23";
       setTimeout(() => modalInputPlaca.focus(), 150);
     }
   } else if (servUpper === "REFORMA") {
@@ -1020,7 +1109,6 @@ form.addEventListener("submit", async (event) => {
   const qtdTotalGeral = itensOS.reduce((soma, i) => soma + i.quantidade, 0);
   const uuidLocal = gerarUUID();
 
-  // 🔥 AQUI ESTÁ A MUDANÇA: SEPARANDO O QUE É SERVIÇO DO QUE É MANUAL
   const cadastro = {
     uuid_local: uuidLocal,
     nome: nomeFinal,
@@ -1029,8 +1117,8 @@ form.addEventListener("submit", async (event) => {
     quantidade: qtdTotalGeral,
     valor: valorTotalGeral,
     itens_servicos: itensOS,
-    observacao: `SERVIÇOS: ${servicosResumo}` || null, // Salva a lista automática
-    observacao_manual: textoDigitado || null, // Salva apenas o que o usuário digitou
+    observacao: `SERVIÇOS: ${servicosResumo}` || null,
+    observacao_manual: textoDigitado || null,
     aparelho: nomeAparelho || "Aparelho Desconhecido",
     cor: itensOS.find((i) => i.cor)?.cor || null,
     placa: itensOS.find((i) => i.placa)?.placa || placaAvulsa || null,
