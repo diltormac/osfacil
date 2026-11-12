@@ -46,6 +46,9 @@ function normalizarOS(item) {
     documento: item.documento || "",
     registro_os: item.registro_os || "",
     numero_venda: item.numero_venda || "",
+    // CORREÇÃO: Carrega os números gerados automaticamente
+    numero_os: item.numero_os || "",
+    numero_os_conserto: item.numero_os_conserto || "",
     observacao_manual: item.observacao_manual || "",
     servico: item.servico || "",
     cor: item.cor || "",
@@ -75,7 +78,7 @@ function montarConsultaOS({
 
   if (estado.filtroFinalizado === "prontas") {
     consulta = consulta.eq("servico_finalizado", true);
-    consulta = consulta.neq("status", "Concluído"); // Ignora as já concluídas
+    consulta = consulta.neq("status", "Concluído");
   }
 
   const termo = estado.busca.trim();
@@ -224,7 +227,6 @@ export async function carregarResumoDashboard() {
 
     let resumo = data || {};
 
-    // Conta "Prontas" apenas se NÃO estiverem Concluídas.
     const { count: totalProntas, error: errorProntas } = await executarConsulta(
       supabaseClient
         .from("ordens_servico")
@@ -425,13 +427,7 @@ export async function salvarEdicoes(id) {
     textoUsuario = "";
   }
 
-  if (!nome)
-    return marcarCampoInvalido("editNome", "Informe o nome do cliente.");
-  if (!telefone)
-    return marcarCampoInvalido(
-      "editTelefone",
-      "Informe o telefone do cliente.",
-    );
+  // CORREÇÃO: Removemos a obrigatoriedade do Nome e Telefone
   if (novoValor === null)
     return marcarCampoInvalido("editValor", "Valor total inválido.");
   if (novoValor < 0)
@@ -466,11 +462,9 @@ export async function salvarEdicoes(id) {
     );
   }
 
-  // LÊ O STATUS ATUAL DO BANCO
+  // CORREÇÃO: O status respeita o banco e recalcula se necessário
   let statusFinal = osAtual.status || "Pendente";
-  let avisoStatus = "";
 
-  // MAS SE HOUVER NÚMEROS, RECALCULA ELE (Proteção contra o usuário mudar algo e salvar sem querer)
   if (statusFinal !== "Cancelado") {
     if (inputVendaVal) {
       statusFinal = "Concluído";

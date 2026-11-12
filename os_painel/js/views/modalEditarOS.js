@@ -239,12 +239,16 @@ export function modalEditarItem(index) {
 }
 
 // =========================================================
-// MODAL DE GERENCIAR NÚMEROS E STATUS
+// MODAL DE GERENCIAR NÚMEROS E STATUS (NOVO FLUXO)
 // =========================================================
 export function abrirModalGerenciarNumeros(id) {
   fecharCamadaPorId("modalGerenciarNumeros");
   const os = listaOS.find((o) => o.id === id);
   if (!os) return;
+
+  // Pega o número atual, seja do registro, da venda ou gerado automaticamente
+  const numeroRegistroAtual =
+    os.registro_os || os.numero_os || os.numero_os_conserto || "";
 
   const div = document.createElement("div");
   div.id = "modalGerenciarNumeros";
@@ -259,18 +263,18 @@ export function abrirModalGerenciarNumeros(id) {
 
       <div>
         <label for="modalRegistro" class="text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1 block">Nº de Registro (OS)</label>
-        <input type="text" id="modalRegistro" maxlength="30" class="edit-input font-bold text-indigo-600" placeholder="0000" value="${esc(os.registro_os || "")}" />
+        <input type="text" id="modalRegistro" maxlength="30" class="edit-input font-bold text-indigo-600" placeholder="0000" value="${esc(numeroRegistroAtual)}" />
       </div>
 
       <div>
         <label for="modalVenda" class="text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1 block">Nº da Venda (Finalização)</label>
         <input type="text" id="modalVenda" maxlength="30" class="edit-input font-bold text-emerald-600" placeholder="000000" value="${esc(os.numero_venda || "")}" />
-        <p class="text-[9px] text-slate-400 mt-1">Ao preencher a venda, o status será alterado para Concluído.</p>
+        <p class="text-[9px] text-slate-400 mt-1">Ao preencher a venda, o status será alterado para Concluído ao salvar o formulário.</p>
       </div>
 
       <div class="flex flex-col gap-2 pt-3 border-t border-slate-100">
         <button type="button" id="btnSalvarNumeros" class="w-full py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg text-sm font-bold transition shadow-md">
-          Salvar e Atualizar Status
+          Confirmar Números
         </button>
         <button type="button" id="btnCancelarOS" class="w-full py-2 bg-red-50 hover:bg-red-100 text-red-600 border border-red-200 rounded-lg text-xs font-bold transition">
           Cancelar esta O.S.
@@ -290,53 +294,40 @@ export function abrirModalGerenciarNumeros(id) {
   const inputReg = div.querySelector("#modalRegistro");
   const inputVen = div.querySelector("#modalVenda");
 
-  div.querySelector("#btnSalvarNumeros").onclick = async () => {
-    inputReg.value = (inputReg.value || "").trim().toUpperCase();
-    inputVen.value = (inputVen.value || "").trim().toUpperCase();
+  // --- AQUI ESTÁ A MUDANÇA ---
+  // Não salva no banco, apenas atualiza o formulário principal
+  div.querySelector("#btnSalvarNumeros").onclick = () => {
+    const regVal = (inputReg.value || "").trim().toUpperCase();
+    const venVal = (inputVen.value || "").trim().toUpperCase();
 
-    let statusFinal = "Pendente";
-    if (inputVen.value) statusFinal = "Concluído";
-    else if (inputReg.value) statusFinal = "Em andamento";
+    const mainReg = document.getElementById("editRegistroOS");
+    if (mainReg) mainReg.value = regVal;
+    const mainVen = document.getElementById("editNumeroVenda");
+    if (mainVen) mainVen.value = venVal;
 
-    const btn = div.querySelector("#btnSalvarNumeros");
-    btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Salvando...';
-    btn.disabled = true;
+    let statusVisual = "Pendente";
+    if (venVal) statusVisual = "Concluído";
+    else if (regVal) statusVisual = "Em andamento";
 
-    try {
-      const { error } = await supabaseClient
-        .from("ordens_servico")
-        .update({
-          registro_os: inputReg.value || null,
-          numero_venda: inputVen.value || null,
-          status: statusFinal,
-        })
-        .eq("id", id);
-
-      if (error) throw error;
-
-      Object.assign(os, {
-        registro_os: inputReg.value,
-        numero_venda: inputVen.value,
-        status: statusFinal,
-      });
-
-      // Atualiza a tela principal (inputs escondidos)
-      const mainReg = document.getElementById("editRegistroOS");
-      if (mainReg) mainReg.value = inputReg.value;
-      const mainVen = document.getElementById("editNumeroVenda");
-      if (mainVen) mainVen.value = inputVen.value;
-
-      toast(`Status atualizado: ${statusFinal}`);
-      fechar();
-      recarregarListaOS();
-    } catch (err) {
-      console.error(err);
-      toast("Erro ao salvar números.", "error");
-      btn.innerHTML = "Salvar e Atualizar Status";
-      btn.disabled = false;
+    // Atualiza a tag visual de status se ela existir
+    const tagStatus = document.querySelector(".statusColorClass");
+    if (tagStatus) {
+      tagStatus.textContent = statusVisual;
+      // Muda a cor da tag (opcional)
+      tagStatus.className =
+        "px-3 py-2 border rounded-lg text-sm font-bold shadow-sm inline-block w-full text-center truncate " +
+        (statusVisual === "Concluído"
+          ? "text-emerald-700 bg-emerald-50 border-emerald-200"
+          : statusVisual === "Em andamento"
+            ? "text-blue-700 bg-blue-50 border-blue-200"
+            : "text-amber-700 bg-amber-50 border-amber-200");
     }
+
+    toast("Números atualizados. Clique em 'Salvar Alterações' para gravar.");
+    fechar();
   };
 
+  // Botão de cancelar O.S. (este realmente salva no banco imediatamente)
   div.querySelector("#btnCancelarOS").onclick = async () => {
     const continuar = await confirmarAcao({
       titulo: "Cancelar O.S.",
@@ -480,7 +471,6 @@ export async function abrirDetalhes(idOuObjeto) {
     os.registro_os || os.numero_os || os.numero_os_conserto || "";
   const valorVenda = os.numero_venda || "";
 
-  // Define a cor do label de status para combinar com o tema
   let statusColor = "text-amber-700 bg-amber-50 border-amber-200";
   if (os.status === "Concluído")
     statusColor = "text-emerald-700 bg-emerald-50 border-emerald-200";
@@ -494,7 +484,6 @@ export async function abrirDetalhes(idOuObjeto) {
     <input type="hidden" id="editNumeroVenda" value="${esc(valorVenda)}" />
     
     <div class="grid grid-cols-1 sm:grid-cols-3 gap-3 sm:gap-4 mb-4">
-      <!-- BOTÃO PARA ABRIR O MODAL DE NÚMEROS -->
       <div class="sm:col-span-2">
         <label class="text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1 block">Controle de OS e Status</label>
         <button type="button" onclick="window.abrirModalGerenciarNumeros(${os.id})" class="w-full flex items-center justify-between px-3 py-2 border border-slate-300 rounded-lg bg-indigo-50 hover:bg-indigo-100 text-sm font-bold text-indigo-700 transition">
@@ -506,17 +495,15 @@ export async function abrirDetalhes(idOuObjeto) {
         </button>
       </div>
       
-      <!-- Tag do Status Atual -->
       <div>
         <label class="text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1 block">Status Atual</label>
-        <div class="px-3 py-2 border rounded-lg text-sm font-bold ${statusColor} shadow-sm inline-block w-full text-center truncate">
+        <div class="statusColorClass px-3 py-2 border rounded-lg text-sm font-bold ${statusColor} shadow-sm inline-block w-full text-center truncate">
           ${os.status || "Pendente"}
         </div>
       </div>
     </div>
 
     <div class="grid grid-cols-1 sm:grid-cols-3 gap-3 sm:gap-4">
-      <!-- NOME (Ocupa 2 colunas) -->
       <div class="sm:col-span-2">
         <label for="editNome" class="text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1 block">Nome do Cliente</label>
         <div class="relative flex items-center">
@@ -527,7 +514,6 @@ export async function abrirDetalhes(idOuObjeto) {
         </div>
       </div>
       
-      <!-- DOCUMENTO (Ocupa 1 coluna) -->
       <div>
         <label for="editDocumento" class="text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1 block">CPF / CNPJ</label>
         <div class="relative flex items-center">
@@ -540,7 +526,6 @@ export async function abrirDetalhes(idOuObjeto) {
     </div>
 
     <div class="grid grid-cols-1 sm:grid-cols-3 gap-3 sm:gap-4 mt-3">
-      <!-- TELEFONE (Ocupa 2 colunas) -->
       <div class="sm:col-span-2">
         <label for="editTelefone" class="text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1 block">Telefone</label>
         <div class="relative flex items-center">
@@ -551,7 +536,6 @@ export async function abrirDetalhes(idOuObjeto) {
         </div>
       </div>
       
-      <!-- COR (Ocupa 1 coluna) -->
       <div>
         <label for="editCor" class="text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1 block">Cor</label>
         <input type="text" id="editCor" maxlength="50" value="${esc(os.cor || "")}" class="edit-input" />
@@ -559,7 +543,6 @@ export async function abrirDetalhes(idOuObjeto) {
     </div>
 
     <div class="grid grid-cols-1 sm:grid-cols-3 gap-3 sm:gap-4 mt-3">
-      <!-- PLACA -->
       <div>
         <label for="editPlaca" class="text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1 block">Placa</label>
         <div class="relative flex items-center">
