@@ -81,7 +81,9 @@ export function renderOS() {
   if (btnMaisDesktop) btnMaisDesktop.innerHTML = botaoCarregarMais();
   if (btnMaisMobile) btnMaisMobile.innerHTML = botaoCarregarMais();
 
-  // Tabela desktop
+  // ==========================================
+  // TABELA DESKTOP
+  // ==========================================
   document.getElementById("tableBody").innerHTML = osFiltradas
     .map((o) => {
       const foto = o.fotos_urls.length
@@ -92,16 +94,34 @@ export function renderOS() {
             0,
           )}</div>`
         : "";
-      
+
       const isPronto = o.servico_finalizado;
-      const tagPronto = isPronto 
-        ? `<span class="ml-2 text-[9px] font-bold bg-green-100 text-green-700 px-1.5 py-0.5 rounded border border-green-300 whitespace-nowrap"><i class="fa-solid fa-check-double text-[8px] mr-1"></i>PRONTO</span>` 
+      const tagPronto = isPronto
+        ? `<span class="ml-2 text-[9px] font-bold bg-green-100 text-green-700 px-1.5 py-0.5 rounded border border-green-300 whitespace-nowrap"><i class="fa-solid fa-check-double text-[8px] mr-1"></i>PRONTO</span>`
         : "";
 
+      // Lógica de cores da linha (Desktop)
+      let rowBgClass = "hover:bg-slate-50";
+      let borderLeftClass = "border-l-4 border-transparent";
+
+      if (o.status === "Pendente") {
+        rowBgClass = "bg-amber-50/30 hover:bg-amber-50/60";
+        borderLeftClass = "border-l-4 border-amber-400";
+      } else if (o.status === "Em andamento") {
+        rowBgClass = "bg-blue-50/30 hover:bg-blue-50/60";
+        borderLeftClass = "border-l-4 border-blue-400";
+      } else if (o.status === "Concluído") {
+        rowBgClass = "hover:bg-slate-50";
+        borderLeftClass = "border-l-4 border-green-400";
+      } else if (o.status === "Cancelado") {
+        rowBgClass = "bg-red-50/30 hover:bg-red-50/60";
+        borderLeftClass = "border-l-4 border-red-400";
+      }
+
       return `
-      <tr class="table-row align-top hover:bg-slate-50 transition-colors ${isPronto ? 'bg-green-50/30' : ''}">
+      <tr class="table-row align-top transition-colors ${rowBgClass} ${isPronto ? "bg-green-50/30" : ""}">
         
-        <td class="px-3 py-3 whitespace-nowrap">
+        <td class="px-3 py-3 whitespace-nowrap ${borderLeftClass}">
           <div class="flex flex-col">
             ${
               o.numero_venda
@@ -151,7 +171,9 @@ export function renderOS() {
     })
     .join("");
 
-  // Cards mobile
+  // ==========================================
+  // CARDS MOBILE
+  // ==========================================
   document.getElementById("mobileList").innerHTML = osFiltradas
     .map((o) => {
       const foto = o.fotos_urls.length
@@ -162,14 +184,25 @@ export function renderOS() {
             0,
           )}</div>`
         : "";
-      
+
       const isPronto = o.servico_finalizado;
-      const corCard = isPronto ? "border-green-400 shadow-green-100" : "border-slate-200";
+
+      // Lógica de cores do card (Mobile)
+      let corCard = "border-slate-200 shadow-sm";
+      if (isPronto) {
+        corCard = "border-green-400 shadow-green-100";
+      } else if (o.status === "Pendente") {
+        corCard = "border-amber-300 shadow-amber-50";
+      } else if (o.status === "Em andamento") {
+        corCard = "border-blue-300 shadow-blue-50";
+      } else if (o.status === "Cancelado") {
+        corCard = "border-red-300 shadow-red-50";
+      }
 
       return `
       <div class="bg-white border ${corCard} rounded-2xl p-4 active:bg-slate-50 transition cursor-pointer shadow-sm relative overflow-hidden" onclick="abrirDetalhes(${o.id})">
         
-        ${isPronto ? `<div class="absolute top-0 right-0 bg-green-500 text-white text-[9px] font-bold px-2 py-0.5 rounded-bl-lg"><i class="fa-solid fa-check-double mr-1"></i>PRONTO</div>` : ''}
+        ${isPronto ? `<div class="absolute top-0 right-0 bg-green-500 text-white text-[9px] font-bold px-2 py-0.5 rounded-bl-lg"><i class="fa-solid fa-check-double mr-1"></i>PRONTO</div>` : ""}
 
         <div class="flex items-start justify-between gap-3 mb-3 mt-1">
           <div class="flex items-center gap-2.5 min-w-0 flex-1">

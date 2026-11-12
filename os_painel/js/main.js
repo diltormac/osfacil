@@ -158,15 +158,19 @@ document.querySelectorAll(".sidebar-link[data-view]").forEach((el) => {
 
 document.querySelectorAll(".sidebar-link[data-filter]").forEach((el) => {
   el.addEventListener("click", () => {
-    estado.filtroStatus = el.dataset.filter;
+    const statusFiltro = el.dataset.filter;
+    estado.filtroStatus = statusFiltro;
     estado.filtroFinalizado = "all";
+
+    // Atualiza os botões da barra de filtros superior também
     document
       .querySelectorAll(".filter-btn")
       .forEach((b) => b.classList.remove("active"));
     const match = document.querySelector(
-      `.filter-btn[data-status="${el.dataset.filter}"]`,
+      `.filter-btn[data-status="${statusFiltro}"]`,
     );
     if (match) match.classList.add("active");
+
     mudarView("os");
     recarregarListaOS();
   });
