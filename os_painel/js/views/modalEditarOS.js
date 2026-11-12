@@ -2,8 +2,6 @@ import { listaOS, itensRascunho, setItensRascunho } from "../state.js";
 import {
   esc,
   urlSegura,
-  numeroExibicao,
-  ehConsertoOuSolda,
   formatarData,
   formatarMoeda,
   lerValor,
@@ -16,6 +14,7 @@ import { criarDropdownCustom } from "./dropdownCustom.js";
 import { supabaseClient } from "../config.js";
 import { abrirRelatorio } from "./relatorio.js";
 import { fotosOSHTML } from "./modalFotosOS.js";
+import { salvarEdicoes, recarregarListaOS } from "../api.js";
 
 let fotografiaFormulario = "";
 
@@ -41,7 +40,6 @@ export function recalcularValorDoRascunho() {
 function itemHTML(item, idx) {
   return `
     <div class="flex items-center justify-between gap-2 bg-slate-50 border border-slate-200 rounded-lg p-2.5 text-xs">
-      
       <div class="flex-1 min-w-0 pr-2">
         <span class="font-bold text-slate-800 truncate block" title="${esc(item.servico) || "Serviço sem nome"}">
           ${esc(item.servico) || "Serviço sem nome"}
@@ -49,15 +47,12 @@ function itemHTML(item, idx) {
         ${item.cor ? `<span class="text-[10px] text-indigo-600 font-medium truncate block mt-0.5">Cor: ${esc(item.cor)}</span>` : ""}
         ${item.placa ? `<span class="text-[10px] text-emerald-600 font-medium truncate block mt-0.5">Placa: ${esc(item.placa)}</span>` : ""}
       </div>
-      
       <div class="w-8 text-center text-slate-500 font-semibold flex-shrink-0">
         ${esc(item.quantidade ?? 1)}
       </div>
-      
       <div class="w-20 text-right font-bold text-emerald-600 tabular-nums flex-shrink-0">
         ${formatarMoeda(item.valor)}
       </div>
-      
       <div class="flex items-center justify-center gap-1 flex-shrink-0 w-[56px]">
         <button type="button" onclick="modalEditarItem(${idx})" class="text-indigo-600 hover:text-indigo-800 p-1 transition-colors" title="Editar item" aria-label="Editar quantidade e valor de ${esc(item.servico)}">
           <i class="fa-solid fa-pen text-[12px]" aria-hidden="true"></i>
@@ -66,7 +61,6 @@ function itemHTML(item, idx) {
           <i class="fa-solid fa-trash-can text-[12px]" aria-hidden="true"></i>
         </button>
       </div>
-      
     </div>`;
 }
 
@@ -84,7 +78,6 @@ export function atualizarHTMLItensModal() {
     campoResumo.value = nomes
       ? `SERVIÇOS: ${nomes}${txtPlaca}`
       : "Nenhum serviço adicionado.";
-
     campoResumo.style.height = "auto";
     campoResumo.style.height = campoResumo.scrollHeight + "px";
   }
@@ -145,12 +138,10 @@ export function modalEditarItem(index) {
         <span><i class="fa-solid fa-pen mr-2 text-indigo-600" aria-hidden="true"></i>Editar Serviço</span>
         <button type="button" data-acao="fechar" class="text-slate-400 hover:text-slate-600 w-8 h-8 inline-flex items-center justify-center rounded-lg" aria-label="Fechar"><i class="fa-solid fa-xmark" aria-hidden="true"></i></button>
       </h3>
-
       <div>
         <label for="editNomeItem" class="text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1 block">Descrição / Nome do Serviço</label>
         <input type="text" id="editNomeItem" maxlength="100" class="edit-input text-xs font-bold" value="${esc(item.servico) || ""}" />
       </div>
-
       <div class="grid grid-cols-2 gap-3">
         <div>
           <label for="editQtdItem" class="text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1 block">Quantidade</label>
@@ -161,13 +152,11 @@ export function modalEditarItem(index) {
           <input type="text" inputmode="decimal" id="editValorItem" class="edit-input text-xs font-bold text-emerald-600" value="${esc(formatarValorCampo(item.valor))}" />
         </div>
       </div>
-
       <div class="flex justify-end gap-2 pt-3 border-t border-slate-100">
         <button type="button" data-acao="cancelar" class="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg text-xs font-bold transition">Cancelar</button>
         <button type="submit" class="px-5 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg text-xs font-bold transition shadow-sm">Salvar Alterações</button>
       </div>
-    </form>
-  `;
+    </form>`;
   document.body.appendChild(divEditar);
 
   const form = divEditar.querySelector("form");
@@ -196,9 +185,10 @@ export function modalEditarItem(index) {
     if (ignorarMascara) return;
     let v = e.target.value.replace(/\D/g, "");
     v = (v / 100).toFixed(2) + "";
-    v = v.replace(".", ",");
-    v = v.replace(/(\d)(\d{3})(\d{3}),/g, "$1.$2.$3,");
-    v = v.replace(/(\d)(\d{3}),/g, "$1.$2,");
+    v = v
+      .replace(".", ",")
+      .replace(/(\d)(\d{3})(\d{3}),/g, "$1.$2.$3,")
+      .replace(/(\d)(\d{3}),/g, "$1.$2,");
     e.target.value = v;
     const qtd = parseInt(inputQtd.value, 10) || 1;
     const total = lerValor(v) || 0;
@@ -231,6 +221,7 @@ export function modalEditarItem(index) {
       inputValor.focus();
       return;
     }
+
     const atualizado = itensRascunho.map((i, idx) =>
       idx === index
         ? { ...i, servico: novoNome, quantidade: novaQtd, valor: novoValor }
@@ -247,11 +238,145 @@ export function modalEditarItem(index) {
   inputNome.select();
 }
 
+// =========================================================
+// MODAL DE GERENCIAR NÚMEROS E STATUS
+// =========================================================
+export function abrirModalGerenciarNumeros(id) {
+  fecharCamadaPorId("modalGerenciarNumeros");
+  const os = listaOS.find((o) => o.id === id);
+  if (!os) return;
+
+  const div = document.createElement("div");
+  div.id = "modalGerenciarNumeros";
+  div.className =
+    "camada-modal fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center z-[80] p-4";
+  div.innerHTML = `
+    <div class="bg-white rounded-2xl p-5 max-w-sm w-full shadow-2xl space-y-4" role="dialog" aria-modal="true" aria-labelledby="tituloGerenciarNum">
+      <h3 id="tituloGerenciarNum" class="font-bold text-slate-800 text-base flex items-center justify-between">
+        <span><i class="fa-solid fa-list-ol mr-2 text-indigo-600" aria-hidden="true"></i>Gerenciar Números</span>
+        <button type="button" data-acao="fechar" class="text-slate-400 hover:text-slate-600 w-8 h-8 inline-flex items-center justify-center rounded-lg" aria-label="Fechar"><i class="fa-solid fa-xmark" aria-hidden="true"></i></button>
+      </h3>
+
+      <div>
+        <label for="modalRegistro" class="text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1 block">Nº de Registro (OS)</label>
+        <input type="text" id="modalRegistro" maxlength="30" class="edit-input font-bold text-indigo-600" placeholder="0000" value="${esc(os.registro_os || "")}" />
+      </div>
+
+      <div>
+        <label for="modalVenda" class="text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1 block">Nº da Venda (Finalização)</label>
+        <input type="text" id="modalVenda" maxlength="30" class="edit-input font-bold text-emerald-600" placeholder="000000" value="${esc(os.numero_venda || "")}" />
+        <p class="text-[9px] text-slate-400 mt-1">Ao preencher a venda, o status será alterado para Concluído.</p>
+      </div>
+
+      <div class="flex flex-col gap-2 pt-3 border-t border-slate-100">
+        <button type="button" id="btnSalvarNumeros" class="w-full py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg text-sm font-bold transition shadow-md">
+          Salvar e Atualizar Status
+        </button>
+        <button type="button" id="btnCancelarOS" class="w-full py-2 bg-red-50 hover:bg-red-100 text-red-600 border border-red-200 rounded-lg text-xs font-bold transition">
+          Cancelar esta O.S.
+        </button>
+      </div>
+    </div>
+  `;
+  document.body.appendChild(div);
+
+  const fechar = () => div.remove();
+  div.fecharCamada = fechar;
+  div.addEventListener("click", (e) => {
+    if (e.target === div) fechar();
+  });
+  div.querySelector('[data-acao="fechar"]').onclick = fechar;
+
+  const inputReg = div.querySelector("#modalRegistro");
+  const inputVen = div.querySelector("#modalVenda");
+
+  div.querySelector("#btnSalvarNumeros").onclick = async () => {
+    inputReg.value = (inputReg.value || "").trim().toUpperCase();
+    inputVen.value = (inputVen.value || "").trim().toUpperCase();
+
+    let statusFinal = "Pendente";
+    if (inputVen.value) statusFinal = "Concluído";
+    else if (inputReg.value) statusFinal = "Em andamento";
+
+    const btn = div.querySelector("#btnSalvarNumeros");
+    btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Salvando...';
+    btn.disabled = true;
+
+    try {
+      const { error } = await supabaseClient
+        .from("ordens_servico")
+        .update({
+          registro_os: inputReg.value || null,
+          numero_venda: inputVen.value || null,
+          status: statusFinal,
+        })
+        .eq("id", id);
+
+      if (error) throw error;
+
+      Object.assign(os, {
+        registro_os: inputReg.value,
+        numero_venda: inputVen.value,
+        status: statusFinal,
+      });
+
+      // Atualiza a tela principal (inputs escondidos)
+      const mainReg = document.getElementById("editRegistroOS");
+      if (mainReg) mainReg.value = inputReg.value;
+      const mainVen = document.getElementById("editNumeroVenda");
+      if (mainVen) mainVen.value = inputVen.value;
+
+      toast(`Status atualizado: ${statusFinal}`);
+      fechar();
+      recarregarListaOS();
+    } catch (err) {
+      console.error(err);
+      toast("Erro ao salvar números.", "error");
+      btn.innerHTML = "Salvar e Atualizar Status";
+      btn.disabled = false;
+    }
+  };
+
+  div.querySelector("#btnCancelarOS").onclick = async () => {
+    const continuar = await confirmarAcao({
+      titulo: "Cancelar O.S.",
+      mensagem: "Tem certeza que deseja CANCELAR esta ordem de serviço?",
+      textoBotao: "Sim, Cancelar",
+      icone: "fa-ban",
+      cor: "red",
+    });
+    if (!continuar) return;
+
+    try {
+      const { error } = await supabaseClient
+        .from("ordens_servico")
+        .update({ status: "Cancelado" })
+        .eq("id", id);
+
+      if (error) throw error;
+
+      Object.assign(os, { status: "Cancelado" });
+
+      toast("O.S. Cancelada com sucesso.");
+      fechar();
+      recarregarListaOS();
+    } catch (err) {
+      console.error(err);
+      toast("Erro ao cancelar a O.S.", "error");
+    }
+  };
+
+  inputReg.focus();
+}
+
+// =========================================================
+// MODAL PRINCIPAL (EDITAR OS)
+// =========================================================
+
 function lerFormulario() {
   const ids = [
-    "editNumeroOS",
+    "editRegistroOS",
     "editNumeroVenda",
-    "editStatus",
     "editNome",
     "editTelefone",
     "editDocumento",
@@ -278,11 +403,8 @@ function formularioAlterado() {
 
 export async function abrirDetalhes(idOuObjeto) {
   let os = null;
-  if (typeof idOuObjeto === "object" && idOuObjeto !== null) {
-    os = idOuObjeto;
-  } else {
-    os = listaOS.find((o) => o.id === idOuObjeto);
-  }
+  if (typeof idOuObjeto === "object" && idOuObjeto !== null) os = idOuObjeto;
+  else os = listaOS.find((o) => o.id === idOuObjeto);
 
   if (!os) {
     toast("Esta OS não existe mais. Atualize a lista.", "error");
@@ -318,7 +440,7 @@ export async function abrirDetalhes(idOuObjeto) {
   );
 
   document.getElementById("modalTitle").textContent =
-    `Editar OS ${numeroExibicao(os)}`;
+    `Editar OS ${os.registro_os || os.id}`;
 
   const aparelhoDiscreto = os.aparelho
     ? `<span class="ml-2 bg-slate-100 text-slate-500 text-[10px] px-2 py-0.5 rounded border border-slate-200"><i class="fa-solid fa-mobile-screen mr-1" aria-hidden="true"></i>${esc(os.aparelho)}</span>`
@@ -326,23 +448,15 @@ export async function abrirDetalhes(idOuObjeto) {
   document.getElementById("modalSubtitle").innerHTML =
     `Criada em ${formatarData(os.created_at)} ${aparelhoDiscreto}`;
 
-  const conserto = ehConsertoOuSolda(os);
-  const numeroOSExibido = conserto
-    ? os.numero_os_conserto || os.numero_os || ""
-    : os.numero_os || "";
-
-  // LÓGICA DO TICK (PRONTO) AO LADO DA OS
-  const isReforma = (os.servico || "").toUpperCase().includes("REFORMA");
   const isPronto = os.servico_finalizado === true;
-  const tickProntoHTML =
-    isReforma && isPronto
-      ? `<span class="absolute right-10 top-1/2 -translate-y-1/2 text-green-500 text-lg" title="Serviço Pronto p/ Retirada"><i class="fa-solid fa-circle-check"></i></span>`
-      : "";
+  const tickProntoHTML = isPronto
+    ? `<span class="absolute right-10 top-1/2 -translate-y-1/2 text-green-500 text-lg" title="Serviço Pronto p/ Retirada"><i class="fa-solid fa-circle-check"></i></span>`
+    : "";
 
   let textoObsAntiga = os.observacao || "";
   let textoManualSalvo = os.observacao_manual || "";
-
   let textoUsuarioFinal = textoManualSalvo;
+
   if (!textoUsuarioFinal) {
     if (textoObsAntiga.toUpperCase().includes("SERVIÇOS:")) {
       textoUsuarioFinal = textoObsAntiga
@@ -362,46 +476,48 @@ export async function abrirDetalhes(idOuObjeto) {
     ? `SERVIÇOS: ${nomesServicos}${txtPlaca}`
     : "Nenhum serviço adicionado.";
 
+  const valorRegistro =
+    os.registro_os || os.numero_os || os.numero_os_conserto || "";
+  const valorVenda = os.numero_venda || "";
+
+  // Define a cor do label de status para combinar com o tema
+  let statusColor = "text-amber-700 bg-amber-50 border-amber-200";
+  if (os.status === "Concluído")
+    statusColor = "text-emerald-700 bg-emerald-50 border-emerald-200";
+  if (os.status === "Em andamento")
+    statusColor = "text-blue-700 bg-blue-50 border-blue-200";
+  if (os.status === "Cancelado")
+    statusColor = "text-red-700 bg-red-50 border-red-200";
+
   document.getElementById("modalBody").innerHTML = `
-    <div class="grid grid-cols-1 sm:grid-cols-3 gap-3 sm:gap-4">
+    <input type="hidden" id="editRegistroOS" value="${esc(valorRegistro)}" />
+    <input type="hidden" id="editNumeroVenda" value="${esc(valorVenda)}" />
+    
+    <div class="grid grid-cols-1 sm:grid-cols-3 gap-3 sm:gap-4 mb-4">
+      <!-- BOTÃO PARA ABRIR O MODAL DE NÚMEROS -->
+      <div class="sm:col-span-2">
+        <label class="text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1 block">Controle de OS e Status</label>
+        <button type="button" onclick="window.abrirModalGerenciarNumeros(${os.id})" class="w-full flex items-center justify-between px-3 py-2 border border-slate-300 rounded-lg bg-indigo-50 hover:bg-indigo-100 text-sm font-bold text-indigo-700 transition">
+          <span class="flex items-center gap-2">
+            <i class="fa-solid fa-list-ol"></i>
+            Gerenciar Números (OS e Venda)
+          </span>
+          <i class="fa-solid fa-chevron-right text-indigo-400 text-xs"></i>
+        </button>
+      </div>
       
-      <!-- 1. Nº DA VENDA -->
+      <!-- Tag do Status Atual -->
       <div>
-        <label for="editNumeroVenda" class="text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1 block">Nº da Venda</label>
-        <div class="relative flex items-center">
-          <input type="text" id="editNumeroVenda" maxlength="30" value="${esc(os.numero_venda || "")}" class="edit-input font-bold text-emerald-600 pr-10" placeholder="123456" />
-          <button type="button" onclick="copiarCampo('editNumeroVenda')" class="absolute right-2 text-slate-400 hover:text-indigo-600 p-1" title="Copiar Nº da Venda" aria-label="Copiar número da venda">
-            <i class="fa-solid fa-copy text-sm" aria-hidden="true"></i>
-          </button>
+        <label class="text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1 block">Status Atual</label>
+        <div class="px-3 py-2 border rounded-lg text-sm font-bold ${statusColor} shadow-sm inline-block w-full text-center truncate">
+          ${os.status || "Pendente"}
         </div>
       </div>
-
-      <!-- 2. NÚMERO DA OS (COM O TICK DE PRONTO) -->
-      <div>
-        <label for="editNumeroOS" class="text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1 block">
-          ${conserto ? "Número da OS (Conserto)" : "Número da OS"}
-        </label>
-        <div class="relative flex items-center">
-          <input type="text" id="editNumeroOS" maxlength="30" value="${esc(numeroOSExibido)}" class="edit-input font-bold text-indigo-600 pr-16" placeholder="1234" />
-          
-          ${tickProntoHTML}
-          
-          <button type="button" onclick="copiarCampo('editNumeroOS')" class="absolute right-2 text-slate-400 hover:text-indigo-600 p-1" title="Copiar Número da OS" aria-label="Copiar número da OS">
-            <i class="fa-solid fa-copy text-sm" aria-hidden="true"></i>
-          </button>
-        </div>
-      </div>
-
-      <!-- 3. STATUS -->
-      <div>
-        <label class="text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1 block">Status</label>
-        <div id="editStatus"></div>
-      </div>
-
     </div>
 
-    <div class="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
-      <div>
+    <div class="grid grid-cols-1 sm:grid-cols-3 gap-3 sm:gap-4">
+      <!-- NOME (Ocupa 2 colunas) -->
+      <div class="sm:col-span-2">
         <label for="editNome" class="text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1 block">Nome do Cliente</label>
         <div class="relative flex items-center">
           <input type="text" id="editNome" maxlength="120" value="${esc(os.nome)}" class="edit-input pr-10" />
@@ -411,17 +527,21 @@ export async function abrirDetalhes(idOuObjeto) {
         </div>
       </div>
       
+      <!-- DOCUMENTO (Ocupa 1 coluna) -->
       <div>
         <label for="editDocumento" class="text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1 block">CPF / CNPJ</label>
         <div class="relative flex items-center">
-          <input type="text" id="editDocumento" maxlength="18" value="${esc(os.documento || "")}" class="edit-input pr-10" placeholder="000.000.000-00 ou 00.000.000/0000-00" />
+          <input type="text" id="editDocumento" maxlength="18" value="${esc(os.documento || "")}" class="edit-input pr-10" placeholder="000.000.000-00" />
           <button type="button" onclick="copiarCampo('editDocumento')" class="absolute right-2 text-slate-400 hover:text-indigo-600 p-1" title="Copiar Documento" aria-label="Copiar documento">
             <i class="fa-solid fa-copy text-sm" aria-hidden="true"></i>
           </button>
         </div>
       </div>
+    </div>
 
-      <div>
+    <div class="grid grid-cols-1 sm:grid-cols-3 gap-3 sm:gap-4 mt-3">
+      <!-- TELEFONE (Ocupa 2 colunas) -->
+      <div class="sm:col-span-2">
         <label for="editTelefone" class="text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1 block">Telefone</label>
         <div class="relative flex items-center">
           <input type="tel" id="editTelefone" maxlength="30" value="${esc(os.telefone)}" class="edit-input pr-10" />
@@ -430,14 +550,16 @@ export async function abrirDetalhes(idOuObjeto) {
           </button>
         </div>
       </div>
-    </div>
-
-    <div class="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
+      
+      <!-- COR (Ocupa 1 coluna) -->
       <div>
         <label for="editCor" class="text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1 block">Cor</label>
         <input type="text" id="editCor" maxlength="50" value="${esc(os.cor || "")}" class="edit-input" />
       </div>
-      
+    </div>
+
+    <div class="grid grid-cols-1 sm:grid-cols-3 gap-3 sm:gap-4 mt-3">
+      <!-- PLACA -->
       <div>
         <label for="editPlaca" class="text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1 block">Placa</label>
         <div class="relative flex items-center">
@@ -449,7 +571,7 @@ export async function abrirDetalhes(idOuObjeto) {
       </div>
     </div>
 
-    <div>
+    <div class="mt-4">
       <div class="flex items-center justify-between mb-2">
         <p class="text-[10px] font-bold text-slate-500 uppercase tracking-wider">Serviços Realizados (Itens)</p>
         <button type="button" onclick="modalAdicionarItem(${os.id})" class="px-2.5 py-1 bg-indigo-50 hover:bg-indigo-100 text-indigo-600 rounded text-xs font-bold transition flex items-center gap-1">
@@ -459,64 +581,45 @@ export async function abrirDetalhes(idOuObjeto) {
       <div id="modalItensContainer" class="space-y-2 max-h-40 overflow-y-auto mb-2"></div>
     </div>
 
-    <!-- VALOR E FORMA DE PAGAMENTO -->
-    <div class="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
+    <div class="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4 mt-4">
       <div>
         <label for="editValor" class="text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1 block">Valor Total (R$)</label>
         <input type="text" inputmode="decimal" id="editValor" value="${esc(formatarValorCampo(os.valor ?? 0))}" class="edit-input font-bold text-emerald-600 tabular-nums" />
       </div>
-      
-      <!-- CAMPO NOVO DE FORMA DE PAGAMENTO -->
       <div>
         <label class="text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1 block">Forma de Pagamento</label>
         <div id="editFormaPagamento"></div>
       </div>
     </div>
 
-    <!-- CAMPO ÚNICO: SERVIÇOS + OBSERVAÇÃO DO USUÁRIO -->
-    <div>
+    <div class="mt-4">
       <div class="flex items-center justify-between mb-1">
         <label class="text-[10px] font-bold text-slate-500 uppercase tracking-wider block">Descrição / Observação</label>
         <button type="button" onclick="copiarObservacaoCompleta()" class="text-xs text-indigo-600 hover:text-indigo-800 font-bold flex items-center gap-1">
           <i class="fa-solid fa-copy" aria-hidden="true"></i> Copiar Observação
         </button>
       </div>
-      
       <div class="w-full rounded-lg border border-slate-300 bg-white flex flex-col p-3 focus-within:border-indigo-500 focus-within:ring-2 focus-within:ring-indigo-500/20 transition-all">
-        <textarea 
-          id="editObservacaoServicos" 
-          readonly 
-          tabindex="-1"
-          class="w-full bg-transparent resize-none outline-none text-slate-500 font-medium cursor-default pointer-events-none p-0 m-0 border-none focus:ring-0 overflow-hidden" 
-          rows="1"
-        >${esc(textoServicosResumo)}</textarea>
-        
-        <textarea 
-          id="editObservacao" 
-          maxlength="2000" 
-          class="w-full min-h-[80px] bg-transparent resize-none outline-none text-slate-800 font-medium p-0 m-0 border-none focus:ring-0 mt-2" 
-          placeholder=""
-        >${esc(textoUsuarioFinal)}</textarea>
+        <textarea id="editObservacaoServicos" readonly tabindex="-1" class="w-full bg-transparent resize-none outline-none text-slate-500 font-medium cursor-default pointer-events-none p-0 m-0 border-none focus:ring-0 overflow-hidden" rows="1">${esc(textoServicosResumo)}</textarea>
+        <textarea id="editObservacao" maxlength="2000" class="w-full min-h-[80px] bg-transparent resize-none outline-none text-slate-800 font-medium p-0 m-0 border-none focus:ring-0 mt-2" placeholder="">${esc(textoUsuarioFinal)}</textarea>
       </div>
     </div>
 
-    <div id="modalFotosContainer">
+    <div id="modalFotosContainer" class="mt-4">
       <div class="flex items-center justify-between mb-2">
         <p class="text-[10px] font-bold text-slate-500 uppercase tracking-wider">Fotos Anexadas</p>
       </div>
       ${fotosOSHTML(os)}
     </div>
 
-    <div class="pt-4 border-t border-slate-200 flex flex-col-reverse sm:flex-row sm:justify-between sm:items-center gap-2">
+    <div class="pt-4 mt-4 border-t border-slate-200 flex flex-col-reverse sm:flex-row sm:justify-between sm:items-center gap-2">
       <button type="button" id="btnExcluirOS" onclick="excluirOS(${os.id})" class="w-full sm:w-auto px-4 py-2.5 bg-red-50 hover:bg-red-100 text-red-600 border border-red-200 rounded-lg text-sm font-bold transition flex items-center justify-center gap-2 disabled:opacity-60 disabled:cursor-not-allowed">
         <i class="fa-solid fa-trash" aria-hidden="true"></i> Excluir
       </button>
-      
       <div class="flex flex-col sm:flex-row gap-2 w-full sm:w-auto">
         <button type="button" onclick="window.abrirRelatorioOS(${os.id})" class="w-full sm:w-auto px-4 py-2.5 bg-slate-800 hover:bg-slate-900 text-white rounded-lg text-sm font-bold transition flex items-center justify-center gap-2 shadow-md">
           <i class="fa-solid fa-file-invoice" aria-hidden="true"></i> Relatório
         </button>
-
         <button type="button" id="btnCompartilharOS" onclick="compartilharOS(${os.id})" class="esconder-no-electron w-full sm:w-auto px-4 py-2.5 bg-green-600 hover:bg-green-700 text-white rounded-lg text-sm font-bold transition flex items-center justify-center gap-2 shadow-md disabled:opacity-60 disabled:cursor-not-allowed">
           <i class="fa-solid fa-share-nodes" aria-hidden="true"></i> Compartilhar
         </button>
@@ -527,6 +630,8 @@ export async function abrirDetalhes(idOuObjeto) {
     </div>
   `;
 
+  window.abrirModalGerenciarNumeros = abrirModalGerenciarNumeros;
+
   atualizarHTMLItensModal();
   document.getElementById("modalDetalhes").classList.add("show");
 
@@ -535,15 +640,12 @@ export async function abrirDetalhes(idOuObjeto) {
       .getElementById("editObservacaoServicos")
       .value.trim();
     const textoUsuario = document.getElementById("editObservacao").value.trim();
-
     const textoFinal =
       textoServicos + (textoUsuario ? `\n\n${textoUsuario}` : "");
-
     if (!textoFinal) {
       toast("O campo de observação está vazio.", "error");
       return;
     }
-
     navigator.clipboard
       .writeText(textoFinal)
       .then(() => toast("Observação copiada com sucesso!"))
@@ -559,33 +661,11 @@ export async function abrirDetalhes(idOuObjeto) {
       txt.style.height = txt.scrollHeight + "px";
     }
   };
-
   setTimeout(ajustarAlturaServicos, 50);
 
   const inputPlaca = document.getElementById("editPlaca");
-  if (inputPlaca) {
-    inputPlaca.addEventListener("input", ajustarAlturaServicos);
-  }
+  if (inputPlaca) inputPlaca.addEventListener("input", ajustarAlturaServicos);
 
-  // Dropdown de Status
-  const editStatusContainer = document.getElementById("editStatus");
-  if (editStatusContainer) {
-    const statusDropdown = criarDropdownCustom({
-      id: "editStatus",
-      name: "status",
-      value: os.status || "Pendente",
-      options: [
-        { value: "Pendente", text: "Pendente" },
-        { value: "Em andamento", text: "Em andamento" },
-        { value: "Concluído", text: "Concluído" },
-        { value: "Cancelado", text: "Cancelado" },
-      ],
-      className: "w-full",
-    });
-    editStatusContainer.replaceWith(statusDropdown);
-  }
-
-  // Dropdown de Forma de Pagamento
   const editFormaPagamentoContainer =
     document.getElementById("editFormaPagamento");
   if (editFormaPagamentoContainer) {
@@ -608,29 +688,26 @@ export async function abrirDetalhes(idOuObjeto) {
     editFormaPagamentoContainer.replaceWith(pagamentoDropdown);
   }
 
-  // Máscara CPF/CNPJ
   const inputDocumento = document.getElementById("editDocumento");
   if (inputDocumento) {
     inputDocumento.addEventListener("input", (e) => {
       let v = e.target.value.replace(/\D/g, "").slice(0, 14);
-      if (v.length <= 11) {
+      if (v.length <= 11)
         v = v
           .replace(/(\d{3})(\d)/, "$1.$2")
           .replace(/(\d{3})(\d)/, "$1.$2")
           .replace(/(\d{3})(\d{1,2})$/, "$1-$2");
-      } else {
+      else
         v = v
           .replace(/^(\d{2})(\d)/, "$1.$2")
           .replace(/^(\d{2})\.(\d{3})(\d)/, "$1.$2.$3")
           .replace(/\.(\d{3})(\d)/, ".$1/$2")
           .replace(/(\d{4})(\d)/, "$1-$2");
-      }
       e.target.value = v;
     });
   }
 
   fotografiaFormulario = lerFormulario();
-  document.getElementById("editStatus").focus();
 }
 
 export async function fecharModal({ forcar = false } = {}) {
@@ -666,22 +743,14 @@ export async function compartilharOS(osId) {
   const itens = Array.isArray(os.itens_servicos) ? os.itens_servicos : [];
   const nomesItens = itens.map((i) => String(i.servico || "").toUpperCase());
   const temReforma = nomesItens.some((n) => n.includes("REFORMA"));
-  const temConserto = nomesItens.some((n) => n.includes("CONSERTO"));
-  const temSolda = nomesItens.some((n) => n.includes("SOLDA"));
   const numeros = [];
 
-  if (temReforma) {
-    const num = os.numero_os || os.numero_os_conserto || `#${os.id}`;
-    numeros.push(`Reforma: ${num}`);
+  if (os.registro_os) {
+    if (temReforma) numeros.push(`Reforma: ${os.registro_os}`);
+    else numeros.push(`OS: ${os.registro_os}`);
   }
-  if (temConserto) {
-    const num = os.numero_os_conserto || os.numero_os || `#${os.id}`;
-    numeros.push(`Conserto: ${num}`);
-  }
-  if (temSolda) {
-    const num = os.numero_os_conserto || os.numero_os || `#${os.id}`;
-    numeros.push(`Solda: ${num}`);
-  }
+  if (os.numero_venda) numeros.push(`Venda: ${os.numero_venda}`);
+
   if (numeros.length > 0) linhas.push(`\nNúmeros: ${numeros.join(" | ")}`);
 
   const obs = os.observacao_manual || os.observacao || "";
@@ -694,14 +763,12 @@ export async function compartilharOS(osId) {
   }
 
   const texto = linhas.join("\n");
-  const titulo = `OS ${numeroExibicao(os)}`;
+  const titulo = `OS ${os.registro_os || os.id}`;
   const fotoUrl = (os.fotos_urls || []).find((u) => urlSegura(u)) || "";
 
   const resultado = await compartilharTexto({ titulo, texto, fotoUrl });
-
-  if (resultado.status === "copiado") {
+  if (resultado.status === "copiado")
     toast("Texto da OS copiado. Cole no app desejado.");
-  } else if (resultado.status === "erro") {
+  else if (resultado.status === "erro")
     toast("Não foi possível compartilhar a OS.", "error");
-  }
 }

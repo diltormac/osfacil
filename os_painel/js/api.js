@@ -31,56 +31,11 @@ import {
   lerValor,
   mensagemErro,
   sinalTempoLimite,
-  ehConsertoOuSolda,
   normalizar,
   confirmarAcao,
 } from "./utils.js";
 
 let carregando = false;
-
-export const LIMIAR_VENDA = 10000;
-
-export function calcularStatusAutomatico(numeroVenda, maxNumeroVenda) {
-  const numTexto = String(numeroVenda || "").trim();
-  if (!numTexto) return null;
-
-  const num = parseInt(numTexto.replace(/\D/g, ""));
-  if (isNaN(num)) return null;
-
-  if (maxNumeroVenda <= 0) return null;
-
-  const diferenca = maxNumeroVenda - num;
-  if (diferenca < LIMIAR_VENDA) return "Concluído";
-  return "Em andamento";
-}
-
-export async function buscarMaxNumeroVenda(excluirId = null) {
-  if (!supabaseClient) return 0;
-  try {
-    let query = supabaseClient
-      .from("ordens_servico")
-      .select("id, numero_venda")
-      .not("numero_venda", "is", null)
-      .neq("numero_venda", "");
-
-    if (excluirId != null) {
-      query = query.neq("id", excluirId);
-    }
-
-    const { data, error } = await query;
-    if (error) throw error;
-
-    let max = 0;
-    (data || []).forEach((item) => {
-      const num = parseInt(String(item.numero_venda).replace(/\D/g, ""));
-      if (!isNaN(num) && num > max) max = num;
-    });
-    return max;
-  } catch (e) {
-    console.error("Erro ao buscar MAX numero_venda:", e);
-    return 0;
-  }
-}
 
 function normalizarOS(item) {
   return {
@@ -89,6 +44,7 @@ function normalizarOS(item) {
     nome: item.nome || "",
     telefone: item.telefone || "",
     documento: item.documento || "",
+    registro_os: item.registro_os || "",
     numero_venda: item.numero_venda || "",
     observacao_manual: item.observacao_manual || "",
     servico: item.servico || "",
@@ -117,9 +73,9 @@ function montarConsultaOS({
   if (estado.filtroServico && estado.filtroServico !== "all")
     consulta = consulta.ilike("servico", `%${estado.filtroServico}%`);
 
-  // NOVO: Filtro para Prontas p/ Retirada
   if (estado.filtroFinalizado === "prontas") {
     consulta = consulta.eq("servico_finalizado", true);
+    consulta = consulta.neq("status", "Concluído"); // Ignora as já concluídas
   }
 
   const termo = estado.busca.trim();
@@ -136,8 +92,7 @@ function montarConsultaOS({
     if (isNumero) partes.push(`id.eq.${qDigitos}`);
     if (textoSeguro) {
       partes.push(`numero_venda.ilike.%${textoSeguro}%`);
-      partes.push(`numero_os.ilike.%${textoSeguro}%`);
-      partes.push(`numero_os_conserto.ilike.%${textoSeguro}%`);
+      partes.push(`registro_os.ilike.%${textoSeguro}%`);
     }
 
     if (partes.length > 0) consulta = consulta.or(partes.join(","));
@@ -262,7 +217,6 @@ export async function carregarResumoDashboard() {
   if (!supabaseClient) return;
   setDashboardCarregamento("carregando");
   try {
-    // 1. Busca os totais normais
     const { data, error } = await executarConsulta(
       supabaseClient.rpc("resumo_os"),
     );
@@ -270,16 +224,16 @@ export async function carregarResumoDashboard() {
 
     let resumo = data || {};
 
-    // 2. Busca a contagem exata de quantas OS estão marcadas como "Prontas"
+    // Conta "Prontas" apenas se NÃO estiverem Concluídas.
     const { count: totalProntas, error: errorProntas } = await executarConsulta(
       supabaseClient
         .from("ordens_servico")
         .select("*", { count: "exact", head: true })
-        .eq("servico_finalizado", true),
+        .eq("servico_finalizado", true)
+        .not("status", "eq", "Concluído"),
     );
 
     if (!errorProntas) {
-      // Adiciona a contagem exata ao objeto resumo
       resumo.prontas = totalProntas || 0;
     }
 
@@ -327,7 +281,7 @@ export async function carregarGaleria() {
       supabaseClient
         .from("ordens_servico")
         .select(
-          "id, nome, numero_os, numero_os_conserto, servico, fotos_urls, created_at",
+          "id, nome, registro_os, numero_venda, servico, fotos_urls, created_at",
         )
         .not("fotos_urls", "is", null)
         .order("created_at", { ascending: false })
@@ -367,7 +321,7 @@ export async function carregarMaisGaleria() {
       supabaseClient
         .from("ordens_servico")
         .select(
-          "id, nome, numero_os, numero_os_conserto, servico, fotos_urls, created_at",
+          "id, nome, registro_os, numero_venda, servico, fotos_urls, created_at",
         )
         .not("fotos_urls", "is", null)
         .order("created_at", { ascending: false })
@@ -432,15 +386,17 @@ export async function salvarEdicoes(id) {
     return;
   }
 
-  const inputNumVal = document
-    .getElementById("editNumeroOS")
-    .value.trim()
+  const inputRegistroVal = (
+    document.getElementById("editRegistroOS")?.value || ""
+  )
+    .trim()
     .toUpperCase();
   const inputVendaVal = (
     document.getElementById("editNumeroVenda")?.value || ""
   )
     .trim()
     .toUpperCase();
+
   const nome = document.getElementById("editNome").value.trim().toUpperCase();
   const telefone = document.getElementById("editTelefone").value.trim();
   const documento = (
@@ -510,35 +466,18 @@ export async function salvarEdicoes(id) {
     );
   }
 
-  const statusManualSelecionado =
-    document.getElementById("editStatus").value || "Pendente";
-
-  let statusFinal = statusManualSelecionado;
-  let statusFoiAutomatico = false;
+  // LÊ O STATUS ATUAL DO BANCO
+  let statusFinal = osAtual.status || "Pendente";
   let avisoStatus = "";
 
-  if (!inputVendaVal) {
-    if (
-      statusManualSelecionado !== "Pendente" &&
-      statusManualSelecionado !== "Cancelado"
-    ) {
+  // MAS SE HOUVER NÚMEROS, RECALCULA ELE (Proteção contra o usuário mudar algo e salvar sem querer)
+  if (statusFinal !== "Cancelado") {
+    if (inputVendaVal) {
+      statusFinal = "Concluído";
+    } else if (inputRegistroVal) {
+      statusFinal = "Em andamento";
+    } else {
       statusFinal = "Pendente";
-      statusFoiAutomatico = true;
-      avisoStatus = "Sem Nº da Venda: status forçado para Pendente.";
-    }
-  } else if (statusManualSelecionado === "Cancelado") {
-    statusFinal = "Cancelado";
-  } else {
-    const maxNumeroVenda = await buscarMaxNumeroVenda(id);
-    const statusSugerido = calcularStatusAutomatico(
-      inputVendaVal,
-      maxNumeroVenda,
-    );
-
-    if (statusSugerido) {
-      statusFinal = statusSugerido;
-      statusFoiAutomatico = true;
-      avisoStatus = `Status definido automaticamente: ${statusFinal}`;
     }
   }
 
@@ -555,13 +494,10 @@ export async function salvarEdicoes(id) {
     itens_servicos: itensAtualizados,
     servico: servicoResumo,
     quantidade: quantidadeResumo,
+    registro_os: inputRegistroVal || null,
     numero_venda: inputVendaVal || null,
     forma_pagamento: formaPagamento || null,
   };
-
-  if (ehConsertoOuSolda(osAtual))
-    dadosAtualizacao.numero_os_conserto = inputNumVal;
-  else dadosAtualizacao.numero_os = inputNumVal;
 
   const destravar = travarBotao("btnSalvarOS", "Salvando…");
   if (!destravar) return;
@@ -581,11 +517,7 @@ export async function salvarEdicoes(id) {
     Object.assign(osAtual, dadosAtualizacao);
     setItensRascunho(itensAtualizados);
 
-    if (statusFoiAutomatico && avisoStatus) {
-      toast(avisoStatus);
-    } else {
-      toast("OS atualizada com sucesso!");
-    }
+    toast("OS atualizada com sucesso!");
 
     const { fecharModal } = await import("./ui.js");
     fecharModal({ forcar: true });
@@ -600,7 +532,6 @@ export async function salvarEdicoes(id) {
   }
 }
 
-// NOVO: FUNÇÃO PARA MARCAR SERVIÇO FINALIZADO DIRETO PELA LISTA
 export async function marcarServicoFinalizado(id, status) {
   try {
     if (!supabaseClient) throw new Error("Failed to fetch");
@@ -680,6 +611,7 @@ export async function excluirOS(id) {
         : "OS excluída com sucesso!",
       fotosFalharam ? "error" : "success",
     );
+
     const { fecharModal } = await import("./ui.js");
     fecharModal({ forcar: true });
     carregarResumoDashboard();
