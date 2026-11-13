@@ -46,7 +46,6 @@ function normalizarOS(item) {
     documento: item.documento || "",
     registro_os: item.registro_os || "",
     numero_venda: item.numero_venda || "",
-    // CORREÇÃO: Carrega os números gerados automaticamente
     numero_os: item.numero_os || "",
     numero_os_conserto: item.numero_os_conserto || "",
     observacao_manual: item.observacao_manual || "",
@@ -54,6 +53,7 @@ function normalizarOS(item) {
     cor: item.cor || "",
     placa: item.placa || "",
     forma_pagamento: item.forma_pagamento || "",
+    desconto: Number(item.desconto) || 0, // <-- ADICIONADO AQUI
     servico_finalizado: item.servico_finalizado || false,
     fotos_urls: Array.isArray(item.fotos_urls)
       ? item.fotos_urls.filter(Boolean)
@@ -410,7 +410,10 @@ export async function salvarEdicoes(id) {
   const placa = (document.getElementById("editPlaca")?.value || "")
     .trim()
     .toUpperCase();
+
   const novoValor = lerValor(document.getElementById("editValor").value);
+  const novoDesconto =
+    lerValor(document.getElementById("editDesconto")?.value) || 0; // <-- ADICIONADO AQUI
 
   const formaPagamento =
     document.getElementById("editFormaPagamento")?.value || "";
@@ -427,7 +430,6 @@ export async function salvarEdicoes(id) {
     textoUsuario = "";
   }
 
-  // CORREÇÃO: Removemos a obrigatoriedade do Nome e Telefone
   if (novoValor === null)
     return marcarCampoInvalido("editValor", "Valor total inválido.");
   if (novoValor < 0)
@@ -462,7 +464,6 @@ export async function salvarEdicoes(id) {
     );
   }
 
-  // CORREÇÃO: O status respeita o banco e recalcula se necessário
   let statusFinal = osAtual.status || "Pendente";
 
   if (statusFinal !== "Cancelado") {
@@ -483,6 +484,7 @@ export async function salvarEdicoes(id) {
     cor,
     placa: placa || null,
     valor: novoValor,
+    desconto: novoDesconto, // <-- ADICIONADO AQUI
     observacao: textoAutomático,
     observacao_manual: textoUsuario,
     itens_servicos: itensAtualizados,

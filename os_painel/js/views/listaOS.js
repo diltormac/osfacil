@@ -87,7 +87,7 @@ export function renderOS() {
   document.getElementById("tableBody").innerHTML = osFiltradas
     .map((o) => {
       const foto = o.fotos_urls.length
-        ? `<div class="w-7 h-7 rounded-full overflow-hidden border border-slate-200 flex-shrink-0">${imgFoto(
+        ? `<div class="w-8 h-8 rounded-full overflow-hidden border border-slate-200 flex-shrink-0 shadow-sm">${imgFoto(
             o.fotos_urls[0],
             "w-full h-full object-cover",
             o.id,
@@ -96,8 +96,10 @@ export function renderOS() {
         : "";
 
       const isPronto = o.servico_finalizado;
+
+      // Tag PRONTO formatada para ficar ao lado do nome de forma limpa
       const tagPronto = isPronto
-        ? `<span class="ml-2 text-[9px] font-bold bg-green-100 text-green-700 px-1.5 py-0.5 rounded border border-green-300 whitespace-nowrap"><i class="fa-solid fa-check-double text-[8px] mr-1"></i>PRONTO</span>`
+        ? `<span class="inline-flex items-center justify-center gap-1 text-[9px] font-bold text-emerald-700 bg-emerald-100 px-1.5 py-0.5 rounded border border-emerald-200 whitespace-nowrap w-max mt-1"><i class="fa-solid fa-check-double text-[8px]"></i> PRONTO</span>`
         : "";
 
       // Lógica de cores da linha (Desktop)
@@ -118,51 +120,68 @@ export function renderOS() {
         borderLeftClass = "border-l-4 border-red-400";
       }
 
+      // CORREÇÃO: Prioriza o registro_os, senão o gerado automático, senão o ID.
+      const numeroExibir =
+        o.registro_os || o.numero_os_conserto || o.numero_os || `#${o.id}`;
+
       return `
-      <tr class="table-row align-top transition-colors ${rowBgClass} ${isPronto ? "bg-green-50/30" : ""}">
+      <!-- Mudança: align-middle para centralizar tudo verticalmente -->
+      <tr class="table-row align-middle transition-colors ${rowBgClass} ${isPronto ? "bg-green-50/30" : ""}">
         
-        <td class="px-3 py-3 whitespace-nowrap ${borderLeftClass}">
+        <!-- Nº OS -->
+        <td class="px-3 py-4 whitespace-nowrap ${borderLeftClass}">
           <div class="flex flex-col">
             ${
               o.numero_venda
-                ? `<span class="text-xs font-bold text-emerald-600" title="Nº da Venda"> ${esc(o.numero_venda)}</span>
-                   <span class="text-[10px] text-slate-400 font-medium" title="ID do Sistema">${esc(numeroExibicao(o))}</span>`
-                : `<span class="text-xs font-bold text-indigo-600">${esc(numeroExibicao(o))}</span>`
+                ? `<span class="text-xs font-bold text-emerald-600" title="Nº da Venda">${esc(o.numero_venda)}</span>
+                   <span class="text-[10px] text-slate-400 font-medium" title="Registro / ID">${esc(numeroExibir)}</span>`
+                : `<span class="text-xs font-bold text-indigo-600">${esc(numeroExibir)}</span>`
             }
           </div>
         </td>
         
+               <!-- Cliente (Nome em cima, PRONTO embaixo) -->
         <td class="px-3 py-3">
-          <div class="flex items-start gap-2 min-w-[150px]">
+          <div class="flex items-center gap-2 min-w-[180px] max-w-[250px]">
             ${
               foto ||
-              `<div class="w-7 h-7 rounded-full bg-slate-100 flex items-center justify-center text-xs font-bold text-slate-600 flex-shrink-0 mt-0.5" aria-hidden="true">${iniciais(o.nome)}</div>`
+              `<div class="w-8 h-8 rounded-full bg-slate-100 flex items-center justify-center text-xs font-bold text-slate-600 flex-shrink-0" aria-hidden="true">${iniciais(o.nome)}</div>`
             }
-            <div class="flex flex-col">
-              <span class="text-sm font-semibold text-slate-800 break-words leading-tight tracking-tight" title="${esc(o.nome)}">${esc(o.nome) || '<span class="text-slate-400 italic font-medium">Sem nome</span>'}</span>
+            
+            <!-- MUDANÇA AQUI: flex-col para empilhar o nome e o balão -->
+            <div class="flex flex-col items-start min-w-0">
+              <span class="text-sm font-semibold text-slate-800 truncate max-w-full" title="${esc(o.nome)}">${esc(o.nome) || '<span class="text-slate-400 italic font-medium">Sem nome</span>'}</span>
               ${tagPronto}
             </div>
           </div>
         </td>
         
-        <td class="px-3 py-3 text-xs text-slate-600 whitespace-nowrap tracking-tight">${esc(o.telefone) || "-"}</td>
+        <!-- Telefone -->
+        <td class="px-3 py-4 text-xs text-slate-600 whitespace-nowrap tracking-tight">${esc(o.telefone) || "-"}</td>
         
-        <td class="px-3 py-3 text-xs text-slate-700 font-medium break-words leading-relaxed min-w-[200px] max-w-[280px]">
+        <!-- Serviço -->
+        <td class="px-3 py-4 text-xs text-slate-700 font-medium break-words leading-relaxed min-w-[180px] max-w-[240px]">
           ${esc(o.servico) || "-"}${o.quantidade ? ` <span class="text-slate-400 font-normal">(${esc(o.quantidade)})</span>` : ""}
         </td>
         
-        <td class="px-3 py-3 text-xs text-slate-700 font-bold whitespace-nowrap">${esc(o.placa) || "-"}</td>
+        <!-- Placa -->
+        <td class="px-3 py-4 text-xs text-slate-700 font-bold whitespace-nowrap">${esc(o.placa) || "-"}</td>
         
-        <td class="px-3 py-3 text-xs text-slate-700 font-medium break-words max-w-[100px]">${esc(o.cor) || "-"}</td>
+        <!-- Cor (Largura controlada) -->
+        <td class="px-3 py-4 text-xs text-slate-700 font-medium break-words min-w-[100px] max-w-[130px] leading-tight">${esc(o.cor) || "-"}</td>
         
-        <td class="px-3 py-3 text-xs text-slate-500 font-medium whitespace-nowrap tracking-tight" title="${esc(o.aparelho)}">${esc(o.aparelho) || "-"}</td>
+        <!-- Origem -->
+        <td class="px-3 py-4 text-xs text-slate-500 font-medium whitespace-nowrap tracking-tight" title="${esc(o.aparelho)}">${esc(o.aparelho) || "-"}</td>
         
-        <td class="px-3 py-3 text-xs font-bold text-emerald-600 text-right whitespace-nowrap tabular-nums tracking-tight">${formatarMoeda(o.valor)}</td>
+        <!-- Valor -->
+        <td class="px-3 py-4 text-xs font-bold text-emerald-600 text-right whitespace-nowrap tabular-nums tracking-tight">${formatarMoeda(o.valor)}</td>
         
-        <td class="px-3 py-3 text-center whitespace-nowrap">${badge(o.status)}</td>
+        <!-- Status -->
+        <td class="px-3 py-4 text-center whitespace-nowrap">${badge(o.status)}</td>
         
-        <td class="px-3 py-3 text-right whitespace-nowrap">
-          <button onclick="abrirDetalhes(${o.id})" class="w-7 h-7 rounded-lg hover:bg-slate-200 text-slate-600 inline-flex items-center justify-center transition" title="Ver / Editar" aria-label="Editar OS de ${esc(o.nome) || "cliente sem nome"}">
+        <!-- Ações -->
+        <td class="px-3 py-4 text-right whitespace-nowrap">
+          <button onclick="abrirDetalhes(${o.id})" class="w-8 h-8 rounded-lg hover:bg-slate-200 text-slate-600 inline-flex items-center justify-center transition" title="Ver / Editar" aria-label="Editar OS de ${esc(o.nome) || "cliente sem nome"}">
             <i class="fa-solid fa-pen-to-square text-sm" aria-hidden="true"></i>
           </button>
         </td>
@@ -177,7 +196,7 @@ export function renderOS() {
   document.getElementById("mobileList").innerHTML = osFiltradas
     .map((o) => {
       const foto = o.fotos_urls.length
-        ? `<div class="w-10 h-10 rounded-full overflow-hidden border border-slate-200 flex-shrink-0">${imgFoto(
+        ? `<div class="w-10 h-10 rounded-full overflow-hidden border border-slate-200 flex-shrink-0 shadow-sm">${imgFoto(
             o.fotos_urls[0],
             "w-full h-full object-cover",
             o.id,
@@ -198,6 +217,10 @@ export function renderOS() {
       } else if (o.status === "Cancelado") {
         corCard = "border-red-300 shadow-red-50";
       }
+
+      // CORREÇÃO: Prioriza o registro_os, senão o gerado automático, senão o ID.
+      const numeroExibir =
+        o.registro_os || o.numero_os_conserto || o.numero_os || `#${o.id}`;
 
       return `
       <div class="bg-white border ${corCard} rounded-2xl p-4 active:bg-slate-50 transition cursor-pointer shadow-sm relative overflow-hidden" onclick="abrirDetalhes(${o.id})">
@@ -220,8 +243,8 @@ export function renderOS() {
             ${
               o.numero_venda
                 ? `<span class="text-[10px] font-bold text-emerald-700 bg-emerald-50 px-2 py-1 rounded-md" title="Nº da Venda">Venda: ${esc(o.numero_venda)}</span>
-                   <span class="text-[9px] text-slate-400 font-medium mt-0.5" title="ID do Sistema">${esc(numeroExibicao(o))}</span>`
-                : `<span class="text-[10px] font-bold text-indigo-600 bg-indigo-50 px-2 py-1 rounded-md">${esc(numeroExibicao(o))}</span>`
+                   <span class="text-[9px] text-slate-400 font-medium mt-0.5" title="Registro / ID">${esc(numeroExibir)}</span>`
+                : `<span class="text-[10px] font-bold text-indigo-600 bg-indigo-50 px-2 py-1 rounded-md">${esc(numeroExibir)}</span>`
             }
           </div>
         </div>

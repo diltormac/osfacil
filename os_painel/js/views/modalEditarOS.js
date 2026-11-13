@@ -29,12 +29,22 @@ export function formatarValorCampo(v) {
 }
 
 export function recalcularValorDoRascunho() {
-  const total = itensRascunho.reduce(
+  const subtotal = itensRascunho.reduce(
     (acc, i) => acc + (Number(i.valor) || 0),
     0,
   );
-  const campo = document.getElementById("editValor");
-  if (campo) campo.value = formatarValorCampo(total);
+
+  const inputDesconto = document.getElementById("editDesconto");
+  const desconto = inputDesconto ? lerValor(inputDesconto.value) || 0 : 0;
+
+  const totalFinal = Math.max(0, subtotal - desconto); // Evita valor negativo
+
+  const campoTotal = document.getElementById("editValor");
+  if (campoTotal) campoTotal.value = formatarValorCampo(totalFinal);
+
+  // Atualiza o subtotal visual se existir
+  const spanSubtotal = document.getElementById("spanSubtotal");
+  if (spanSubtotal) spanSubtotal.textContent = formatarMoeda(subtotal);
 }
 
 function itemHTML(item, idx) {
@@ -294,8 +304,6 @@ export function abrirModalGerenciarNumeros(id) {
   const inputReg = div.querySelector("#modalRegistro");
   const inputVen = div.querySelector("#modalVenda");
 
-  // --- AQUI ESTÁ A MUDANÇA ---
-  // Não salva no banco, apenas atualiza o formulário principal
   div.querySelector("#btnSalvarNumeros").onclick = () => {
     const regVal = (inputReg.value || "").trim().toUpperCase();
     const venVal = (inputVen.value || "").trim().toUpperCase();
@@ -313,7 +321,6 @@ export function abrirModalGerenciarNumeros(id) {
     const tagStatus = document.querySelector(".statusColorClass");
     if (tagStatus) {
       tagStatus.textContent = statusVisual;
-      // Muda a cor da tag (opcional)
       tagStatus.className =
         "px-3 py-2 border rounded-lg text-sm font-bold shadow-sm inline-block w-full text-center truncate " +
         (statusVisual === "Concluído"
@@ -327,7 +334,6 @@ export function abrirModalGerenciarNumeros(id) {
     fechar();
   };
 
-  // Botão de cancelar O.S. (este realmente salva no banco imediatamente)
   div.querySelector("#btnCancelarOS").onclick = async () => {
     const continuar = await confirmarAcao({
       titulo: "Cancelar O.S.",
@@ -374,6 +380,7 @@ function lerFormulario() {
     "editCor",
     "editPlaca",
     "editValor",
+    "editDesconto",
     "editObservacao",
     "editObservacaoServicos",
     "editFormaPagamento",
@@ -471,6 +478,9 @@ export async function abrirDetalhes(idOuObjeto) {
     os.registro_os || os.numero_os || os.numero_os_conserto || "";
   const valorVenda = os.numero_venda || "";
 
+  // Subtotal sem desconto
+  const subtotalValor = Number(os.valor) + (Number(os.desconto) || 0);
+
   let statusColor = "text-amber-700 bg-amber-50 border-amber-200";
   if (os.status === "Concluído")
     statusColor = "text-emerald-700 bg-emerald-50 border-emerald-200";
@@ -564,11 +574,28 @@ export async function abrirDetalhes(idOuObjeto) {
       <div id="modalItensContainer" class="space-y-2 max-h-40 overflow-y-auto mb-2"></div>
     </div>
 
-    <div class="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4 mt-4">
+    <!-- BLOCO DE VALORES: SUBTOTAL, DESCONTO E TOTAL -->
+    <div class="bg-slate-50 border border-slate-200 p-3 rounded-lg mt-4 grid grid-cols-1 sm:grid-cols-3 gap-3 sm:gap-4">
+      <div>
+        <label class="text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1 block">Subtotal (Serviços)</label>
+        <div class="w-full px-3 py-2 bg-slate-200 border border-slate-300 rounded-lg text-sm font-bold text-slate-600 tabular-nums">
+          <span id="spanSubtotal">${formatarMoeda(subtotalValor)}</span>
+        </div>
+      </div>
+      
+      <div>
+        <label for="editDesconto" class="text-[10px] font-bold text-red-500 uppercase tracking-wider mb-1 block">Desconto (R$)</label>
+        <input type="text" inputmode="decimal" id="editDesconto" value="${esc(formatarValorCampo(os.desconto || 0))}" class="edit-input font-bold text-red-600 tabular-nums" />
+      </div>
+
       <div>
         <label for="editValor" class="text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1 block">Valor Total (R$)</label>
-        <input type="text" inputmode="decimal" id="editValor" value="${esc(formatarValorCampo(os.valor ?? 0))}" class="edit-input font-bold text-emerald-600 tabular-nums" />
+        <input type="text" inputmode="decimal" id="editValor" value="${esc(formatarValorCampo(os.valor ?? 0))}" class="edit-input font-bold text-emerald-600 tabular-nums bg-emerald-50 border-emerald-300" readonly />
+        <p class="text-[9px] text-slate-400 mt-1">Calculado automaticamente</p>
       </div>
+    </div>
+
+    <div class="grid grid-cols-1 gap-3 sm:gap-4 mt-3">
       <div>
         <label class="text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1 block">Forma de Pagamento</label>
         <div id="editFormaPagamento"></div>
@@ -617,6 +644,21 @@ export async function abrirDetalhes(idOuObjeto) {
 
   atualizarHTMLItensModal();
   document.getElementById("modalDetalhes").classList.add("show");
+
+  // Evento do Desconto em tempo real
+  const inputDesconto = document.getElementById("editDesconto");
+  if (inputDesconto) {
+    inputDesconto.addEventListener("input", (e) => {
+      let v = e.target.value.replace(/\D/g, "");
+      v = (v / 100).toFixed(2) + "";
+      v = v
+        .replace(".", ",")
+        .replace(/(\d)(\d{3})(\d{3}),/g, "$1.$2.$3,")
+        .replace(/(\d)(\d{3}),/g, "$1.$2,");
+      e.target.value = v;
+      recalcularValorDoRascunho();
+    });
+  }
 
   window.copiarObservacaoCompleta = function () {
     const textoServicos = document
@@ -721,20 +763,23 @@ export async function compartilharOS(osId) {
   if (os.nome) linhas.push(`Cliente: ${os.nome}`);
   if (os.placa) linhas.push(`Placa: ${os.placa}`);
   if (os.cor) linhas.push(`Cor: ${os.cor}`);
-  if (os.forma_pagamento) linhas.push(`Pagamento: ${os.forma_pagamento}`);
+  // Removido o Pagamento conforme solicitado
 
   const itens = Array.isArray(os.itens_servicos) ? os.itens_servicos : [];
   const nomesItens = itens.map((i) => String(i.servico || "").toUpperCase());
   const temReforma = nomesItens.some((n) => n.includes("REFORMA"));
-  const numeros = [];
 
-  if (os.registro_os) {
-    if (temReforma) numeros.push(`Reforma: ${os.registro_os}`);
-    else numeros.push(`OS: ${os.registro_os}`);
+  const numeroRegistro =
+    os.registro_os || os.numero_os_conserto || os.numero_os;
+
+  const numeros = [];
+  if (numeroRegistro) {
+    if (temReforma) numeros.push(`Reforma: ${numeroRegistro}`);
+    else numeros.push(`OS: ${numeroRegistro}`);
   }
   if (os.numero_venda) numeros.push(`Venda: ${os.numero_venda}`);
 
-  if (numeros.length > 0) linhas.push(`\nNúmeros: ${numeros.join(" | ")}`);
+  if (numeros.length > 0) linhas.push(`Números: ${numeros.join(" | ")}`);
 
   const obs = os.observacao_manual || os.observacao || "";
   if (obs) {
@@ -742,11 +787,11 @@ export async function compartilharOS(osId) {
       .replace(/\s*\|\s*PLACA:[^|]*/g, "")
       .replace(/\s*\|\s*COR:[^|]*/g, "")
       .trim();
-    if (obsLimpa) linhas.push(`\nObservações: ${obsLimpa}`);
+    if (obsLimpa) linhas.push(`Observações: ${obsLimpa}`);
   }
 
   const texto = linhas.join("\n");
-  const titulo = `OS ${os.registro_os || os.id}`;
+  const titulo = `OS ${numeroRegistro || os.id}`;
   const fotoUrl = (os.fotos_urls || []).find((u) => urlSegura(u)) || "";
 
   const resultado = await compartilharTexto({ titulo, texto, fotoUrl });
