@@ -796,7 +796,13 @@
         window.addEventListener("load", () => {
           navigator.serviceWorker
             .register("./service-worker.js")
-            .catch((error) => console.error("Falha ao registrar PWA:", error));
+            .then((reg) => {
+              // Força a verificação de atualizações imediatamente
+              reg.update();
+            })
+            .catch((error) => {
+              console.error("Falha ao registrar PWA:", error);
+            });
         });
       }
     </script>
