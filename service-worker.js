@@ -7,7 +7,7 @@
    - Navegação (HTML) → network-first com fallback cache
    ========================================================= */
 
-const VERSAO = "v10"; // <-- Mude para v2, v3, etc. quando alterar o código
+const VERSAO = "v11"; // <-- Mude para v2, v3, etc. quando alterar o código
 const CACHE_SHELL = `precadastro-shell-${VERSAO}`;
 const CACHE_CDN = `precadastro-cdn-${VERSAO}`;
 const CACHE_API = `precadastro-api-${VERSAO}`;
