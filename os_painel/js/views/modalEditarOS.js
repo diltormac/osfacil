@@ -8,7 +8,7 @@ import {
   toast,
   confirmarAcao,
 } from "../utils.js";
-import { fecharCamadaPorId } from "./helpers.js";
+import { fecharCamadaPorId, aplicarMiniaturasNaTela } from "./helpers.js";
 import { compartilharTexto } from "../compartilhamento.js";
 import { criarDropdownCustom } from "./dropdownCustom.js";
 import { supabaseClient } from "../config.js";
@@ -37,12 +37,11 @@ export function recalcularValorDoRascunho() {
   const inputDesconto = document.getElementById("editDesconto");
   const desconto = inputDesconto ? lerValor(inputDesconto.value) || 0 : 0;
 
-  const totalFinal = Math.max(0, subtotal - desconto); // Evita valor negativo
+  const totalFinal = Math.max(0, subtotal - desconto);
 
   const campoTotal = document.getElementById("editValor");
   if (campoTotal) campoTotal.value = formatarValorCampo(totalFinal);
 
-  // Atualiza o subtotal visual se existir
   const spanSubtotal = document.getElementById("spanSubtotal");
   if (spanSubtotal) spanSubtotal.textContent = formatarMoeda(subtotal);
 }
@@ -256,7 +255,6 @@ export function abrirModalGerenciarNumeros(id) {
   const os = listaOS.find((o) => o.id === id);
   if (!os) return;
 
-  // Pega o número atual, seja do registro, da venda ou gerado automaticamente
   const numeroRegistroAtual =
     os.registro_os || os.numero_os || os.numero_os_conserto || "";
 
@@ -317,7 +315,6 @@ export function abrirModalGerenciarNumeros(id) {
     if (venVal) statusVisual = "Concluído";
     else if (regVal) statusVisual = "Em andamento";
 
-    // Atualiza a tag visual de status se ela existir
     const tagStatus = document.querySelector(".statusColorClass");
     if (tagStatus) {
       tagStatus.textContent = statusVisual;
@@ -446,11 +443,6 @@ export async function abrirDetalhes(idOuObjeto) {
   document.getElementById("modalSubtitle").innerHTML =
     `Criada em ${formatarData(os.created_at)} ${aparelhoDiscreto}`;
 
-  const isPronto = os.servico_finalizado === true;
-  const tickProntoHTML = isPronto
-    ? `<span class="absolute right-10 top-1/2 -translate-y-1/2 text-green-500 text-lg" title="Serviço Pronto p/ Retirada"><i class="fa-solid fa-circle-check"></i></span>`
-    : "";
-
   let textoObsAntiga = os.observacao || "";
   let textoManualSalvo = os.observacao_manual || "";
   let textoUsuarioFinal = textoManualSalvo;
@@ -477,8 +469,6 @@ export async function abrirDetalhes(idOuObjeto) {
   const valorRegistro =
     os.registro_os || os.numero_os || os.numero_os_conserto || "";
   const valorVenda = os.numero_venda || "";
-
-  // Subtotal sem desconto
   const subtotalValor = Number(os.valor) + (Number(os.desconto) || 0);
 
   let statusColor = "text-amber-700 bg-amber-50 border-amber-200";
@@ -574,7 +564,6 @@ export async function abrirDetalhes(idOuObjeto) {
       <div id="modalItensContainer" class="space-y-2 max-h-40 overflow-y-auto mb-2"></div>
     </div>
 
-    <!-- BLOCO DE VALORES: SUBTOTAL, DESCONTO E TOTAL -->
     <div class="bg-slate-50 border border-slate-200 p-3 rounded-lg mt-4 grid grid-cols-1 sm:grid-cols-3 gap-3 sm:gap-4">
       <div>
         <label class="text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1 block">Subtotal (Serviços)</label>
@@ -591,7 +580,6 @@ export async function abrirDetalhes(idOuObjeto) {
       <div>
         <label for="editValor" class="text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1 block">Valor Total (R$)</label>
         <input type="text" inputmode="decimal" id="editValor" value="${esc(formatarValorCampo(os.valor ?? 0))}" class="edit-input font-bold text-emerald-600 tabular-nums bg-emerald-50 border-emerald-300" readonly />
-        <p class="text-[9px] text-slate-400 mt-1">Calculado automaticamente</p>
       </div>
     </div>
 
@@ -609,9 +597,9 @@ export async function abrirDetalhes(idOuObjeto) {
           <i class="fa-solid fa-copy" aria-hidden="true"></i> Copiar Observação
         </button>
       </div>
-      <div class="w-full rounded-lg border border-slate-300 bg-white flex flex-col p-3 focus-within:border-indigo-500 focus-within:ring-2 focus-within:ring-indigo-500/20 transition-all">
-        <textarea id="editObservacaoServicos" readonly tabindex="-1" class="w-full bg-transparent resize-none outline-none text-slate-500 font-medium cursor-default pointer-events-none p-0 m-0 border-none focus:ring-0 overflow-hidden" rows="1">${esc(textoServicosResumo)}</textarea>
-        <textarea id="editObservacao" maxlength="2000" class="w-full min-h-[80px] bg-transparent resize-none outline-none text-slate-800 font-medium p-0 m-0 border-none focus:ring-0 mt-2" placeholder="">${esc(textoUsuarioFinal)}</textarea>
+      <div class="w-full rounded-lg border border-slate-300 bg-white flex flex-col p-3 focus-within:border-indigo-500 transition-all">
+        <textarea id="editObservacaoServicos" readonly tabindex="-1" class="w-full bg-transparent resize-none outline-none text-slate-500 font-medium cursor-default pointer-events-none p-0 m-0 border-none overflow-hidden" rows="1">${esc(textoServicosResumo)}</textarea>
+        <textarea id="editObservacao" maxlength="2000" class="w-full min-h-[80px] bg-transparent resize-none outline-none text-slate-800 font-medium p-0 m-0 border-none mt-2" placeholder="">${esc(textoUsuarioFinal)}</textarea>
       </div>
     </div>
 
@@ -645,7 +633,6 @@ export async function abrirDetalhes(idOuObjeto) {
   atualizarHTMLItensModal();
   document.getElementById("modalDetalhes").classList.add("show");
 
-  // Evento do Desconto em tempo real
   const inputDesconto = document.getElementById("editDesconto");
   if (inputDesconto) {
     inputDesconto.addEventListener("input", (e) => {
@@ -733,6 +720,8 @@ export async function abrirDetalhes(idOuObjeto) {
   }
 
   fotografiaFormulario = lerFormulario();
+
+  aplicarMiniaturasNaTela();
 }
 
 export async function fecharModal({ forcar = false } = {}) {
@@ -763,7 +752,6 @@ export async function compartilharOS(osId) {
   if (os.nome) linhas.push(`Cliente: ${os.nome}`);
   if (os.placa) linhas.push(`Placa: ${os.placa}`);
   if (os.cor) linhas.push(`Cor: ${os.cor}`);
-  // Removido o Pagamento conforme solicitado
 
   const itens = Array.isArray(os.itens_servicos) ? os.itens_servicos : [];
   const nomesItens = itens.map((i) => String(i.servico || "").toUpperCase());
@@ -771,7 +759,6 @@ export async function compartilharOS(osId) {
 
   const numeroRegistro =
     os.registro_os || os.numero_os_conserto || os.numero_os;
-
   const numeros = [];
   if (numeroRegistro) {
     if (temReforma) numeros.push(`Reforma: ${numeroRegistro}`);

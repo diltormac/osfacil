@@ -1,4 +1,5 @@
 import { supabaseClient } from "./config.js";
+import { db } from "./db.js";
 import {
   listaOS,
   setListaOS,
@@ -53,7 +54,7 @@ function normalizarOS(item) {
     cor: item.cor || "",
     placa: item.placa || "",
     forma_pagamento: item.forma_pagamento || "",
-    desconto: Number(item.desconto) || 0, // <-- ADICIONADO AQUI
+    desconto: Number(item.desconto) || 0,
     servico_finalizado: item.servico_finalizado || false,
     fotos_urls: Array.isArray(item.fotos_urls)
       ? item.fotos_urls.filter(Boolean)
@@ -131,11 +132,89 @@ async function executarConsulta(consulta) {
   return sinal ? consulta.abortSignal(sinal) : consulta;
 }
 
+function filtrarLocalmente(listaOriginal) {
+  let filtrada = [...listaOriginal];
+
+  if (estado.filtroStatus && estado.filtroStatus !== "all") {
+    filtrada = filtrada.filter((o) => o.status === estado.filtroStatus);
+  }
+  if (estado.filtroFinalizado === "prontas") {
+    filtrada = filtrada.filter(
+      (o) => o.servico_finalizado === true && o.status !== "Concluído",
+    );
+  }
+  if (estado.filtroServico && estado.filtroServico !== "all") {
+    const servicoBusca = normalizar(estado.filtroServico);
+    filtrada = filtrada.filter((o) =>
+      normalizar(o.servico).includes(servicoBusca),
+    );
+  }
+
+  const termo = estado.busca.trim();
+  if (termo) {
+    const q = normalizar(termo);
+    const qDigitos = q.replace(/\D/g, "");
+    const isNumero = /^\d+$/.test(qDigitos);
+    const textoSeguro = q.replace(/[%,()]/g, "").trim();
+
+    filtrada = filtrada.filter((o) => {
+      const buscaNorm = normalizar(o.nome || "");
+      const tel = (o.telefone || "").replace(/\D/g, "");
+      const placa = normalizar(o.placa);
+      const numVenda = normalizar(o.numero_venda);
+      const regOs = normalizar(o.registro_os);
+      const id = String(o.id);
+
+      let match = false;
+      if (textoSeguro && buscaNorm.includes(textoSeguro)) match = true;
+      if (qDigitos.length >= 3 && tel.includes(qDigitos)) match = true;
+      if (textoSeguro && placa.includes(textoSeguro)) match = true;
+      if (isNumero && id === qDigitos) match = true;
+      if (textoSeguro && numVenda.includes(textoSeguro)) match = true;
+      if (textoSeguro && regOs.includes(textoSeguro)) match = true;
+
+      return match;
+    });
+  }
+
+  if (estado.dataInicial) {
+    const dtInc = new Date(`${estado.dataInicial}T00:00:00`).getTime();
+    filtrada = filtrada.filter(
+      (o) => new Date(o.created_at).getTime() >= dtInc,
+    );
+  }
+  if (estado.dataFinal) {
+    const dtFim = new Date(`${estado.dataFinal}T23:59:59`).getTime();
+    filtrada = filtrada.filter(
+      (o) => new Date(o.created_at).getTime() <= dtFim,
+    );
+  }
+
+  switch (estado.ordenacao) {
+    case "data-asc":
+      filtrada.sort((a, b) => new Date(a.created_at) - new Date(b.created_at));
+      break;
+    case "nome-asc":
+      filtrada.sort((a, b) => (a.nome || "").localeCompare(b.nome || ""));
+      break;
+    case "nome-desc":
+      filtrada.sort((a, b) => (b.nome || "").localeCompare(a.nome || ""));
+      break;
+    case "data-desc":
+    default:
+      filtrada.sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
+      break;
+  }
+
+  return filtrada;
+}
+
 export async function carregarDados() {
   if (carregando) return;
   carregando = true;
   const { atualizarTudo, definirAtualizando } = await import("./ui.js");
   definirAtualizando(true);
+
   try {
     if (!supabaseClient) throw new Error("Failed to fetch");
     setPaginaOS(0);
@@ -143,54 +222,52 @@ export async function carregarDados() {
       montarConsultaOS({ offset: 0 }),
     );
     if (error) throw error;
-    setListaOS((data || []).map(normalizarOS));
+
+    const norm = (data || []).map(normalizarOS);
+    setListaOS(norm);
     setTemMaisOS((data || []).length === TAMANHO_PAGINA_OS);
     estado.carregamento = "ok";
     estado.mensagemErro = "";
+
+    // AQUI ESTAVA O ERRO: Removemos o "clear()" para não apagar o banco
+    await db.ordens_servico.bulkPut(norm);
   } catch (error) {
-    console.error(error);
-    estado.carregamento = "erro";
-    estado.mensagemErro = mensagemErro(error, "carregar as ordens de serviço");
-    if (listaOS.length) toast(estado.mensagemErro, "error");
+    console.warn("Erro online, buscando no Dexie...", error);
+    const locais = await db.ordens_servico.toArray();
+    if (locais.length > 0) {
+      setListaOS(filtrarLocalmente(locais));
+      setTemMaisOS(false);
+      estado.carregamento = "ok";
+      estado.mensagemErro = "";
+    } else {
+      estado.carregamento = "erro";
+      estado.mensagemErro = mensagemErro(
+        error,
+        "carregar as ordens de serviço",
+      );
+      if (listaOS.length) toast(estado.mensagemErro, "error");
+    }
   } finally {
     carregando = false;
     definirAtualizando(false);
     atualizarTudo();
   }
+
   carregarResumoDashboard();
   carregarUltimasOS();
   carregarGaleria();
 }
 
 export async function recarregarListaOS() {
-  if (carregando) return;
-  carregando = true;
-  const { atualizarTudo, definirAtualizando } = await import("./ui.js");
-  definirAtualizando(true);
-  try {
-    if (!supabaseClient) throw new Error("Failed to fetch");
-    setPaginaOS(0);
-    const { data, error } = await executarConsulta(
-      montarConsultaOS({ offset: 0 }),
-    );
-    if (error) throw error;
-    setListaOS((data || []).map(normalizarOS));
-    setTemMaisOS((data || []).length === TAMANHO_PAGINA_OS);
-    estado.carregamento = "ok";
-    estado.mensagemErro = "";
-  } catch (error) {
-    console.error(error);
-    estado.carregamento = "erro";
-    estado.mensagemErro = mensagemErro(error, "carregar as ordens de serviço");
-  } finally {
-    carregando = false;
-    definirAtualizando(false);
-    atualizarTudo();
-  }
+  return carregarDados();
 }
 
 export async function carregarMaisOS() {
   if (carregando || !supabaseClient) return;
+  if (!navigator.onLine) {
+    toast("Você está offline. Não é possível carregar mais OS.", "error");
+    return;
+  }
   carregando = true;
   setCarregandoMaisOS(true);
   const { renderOS } = await import("./ui.js");
@@ -202,10 +279,13 @@ export async function carregarMaisOS() {
       montarConsultaOS({ offset }),
     );
     if (error) throw error;
+
     const novos = (data || []).map(normalizarOS);
     adicionarListaOS(novos);
     setPaginaOS(proximaPagina);
     setTemMaisOS(novos.length === TAMANHO_PAGINA_OS);
+
+    await db.ordens_servico.bulkPut(novos);
   } catch (error) {
     console.error(error);
     toast(mensagemErro(error, "carregar mais ordens"), "error");
@@ -219,6 +299,7 @@ export async function carregarMaisOS() {
 export async function carregarResumoDashboard() {
   if (!supabaseClient) return;
   setDashboardCarregamento("carregando");
+
   try {
     const { data, error } = await executarConsulta(
       supabaseClient.rpc("resumo_os"),
@@ -226,7 +307,6 @@ export async function carregarResumoDashboard() {
     if (error) throw error;
 
     let resumo = data || {};
-
     const { count: totalProntas, error: errorProntas } = await executarConsulta(
       supabaseClient
         .from("ordens_servico")
@@ -235,19 +315,26 @@ export async function carregarResumoDashboard() {
         .not("status", "eq", "Concluído"),
     );
 
-    if (!errorProntas) {
-      resumo.prontas = totalProntas || 0;
-    }
+    if (!errorProntas) resumo.prontas = totalProntas || 0;
 
     setResumoDashboard(resumo);
     setDashboardCarregamento("ok");
     setDashboardMensagemErro("");
+
+    await db.resumo_dashboard.put({ id: 1, ...resumo });
   } catch (error) {
-    console.error(error);
-    setDashboardCarregamento("erro");
-    setDashboardMensagemErro(
-      mensagemErro(error, "carregar o resumo do dashboard"),
-    );
+    console.warn("Erro no resumo online. Tentando Dexie...", error);
+    const cache = await db.resumo_dashboard.get(1);
+    if (cache) {
+      setResumoDashboard(cache);
+      setDashboardCarregamento("ok");
+      setDashboardMensagemErro("");
+    } else {
+      setDashboardCarregamento("erro");
+      setDashboardMensagemErro(
+        mensagemErro(error, "carregar o resumo do dashboard"),
+      );
+    }
   } finally {
     const { renderDashboard } = await import("./ui.js");
     renderDashboard();
@@ -265,10 +352,16 @@ export async function carregarUltimasOS() {
         .limit(10),
     );
     if (error) throw error;
-    setUltimasOS((data || []).map(normalizarOS));
+
+    const ultimas = (data || []).map(normalizarOS);
+    setUltimasOS(ultimas);
+
+    await db.ordens_servico.bulkPut(ultimas);
   } catch (error) {
-    console.error(error);
-    setUltimasOS([]);
+    console.warn("Erro nas últimas OS online. Tentando Dexie...", error);
+    const locais = await db.ordens_servico.toArray();
+    locais.sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
+    setUltimasOS(locais.slice(0, 10));
   } finally {
     const { renderDashboard } = await import("./ui.js");
     renderDashboard();
@@ -313,6 +406,7 @@ export async function carregarGaleria() {
 
 export async function carregarMaisGaleria() {
   if (!supabaseClient) return;
+  if (!navigator.onLine) return;
   setCarregandoMaisGaleria(true);
   const { renderGaleria } = await import("./ui.js");
   renderGaleria();
@@ -398,7 +492,6 @@ export async function salvarEdicoes(id) {
   )
     .trim()
     .toUpperCase();
-
   const nome = document.getElementById("editNome").value.trim().toUpperCase();
   const telefone = document.getElementById("editTelefone").value.trim();
   const documento = (
@@ -410,14 +503,11 @@ export async function salvarEdicoes(id) {
   const placa = (document.getElementById("editPlaca")?.value || "")
     .trim()
     .toUpperCase();
-
   const novoValor = lerValor(document.getElementById("editValor").value);
   const novoDesconto =
-    lerValor(document.getElementById("editDesconto")?.value) || 0; // <-- ADICIONADO AQUI
-
+    lerValor(document.getElementById("editDesconto")?.value) || 0;
   const formaPagamento =
     document.getElementById("editFormaPagamento")?.value || "";
-
   const textoServicosResumo =
     document.getElementById("editObservacaoServicos")?.value || "";
   const textoAutomático = textoServicosResumo.trim();
@@ -426,9 +516,8 @@ export async function salvarEdicoes(id) {
     .value.trim()
     .toUpperCase();
 
-  if (textoUsuario === osAtual.observacao || textoUsuario === textoAutomático) {
+  if (textoUsuario === osAtual.observacao || textoUsuario === textoAutomático)
     textoUsuario = "";
-  }
 
   if (novoValor === null)
     return marcarCampoInvalido("editValor", "Valor total inválido.");
@@ -440,7 +529,6 @@ export async function salvarEdicoes(id) {
     let novoItem = { ...item };
     if (nomeItem.includes("REFORMA")) novoItem.cor = cor;
     else novoItem.cor = "";
-
     if (
       nomeItem.includes("ALINHAMENTO") ||
       nomeItem.includes("CAMBER") ||
@@ -465,15 +553,10 @@ export async function salvarEdicoes(id) {
   }
 
   let statusFinal = osAtual.status || "Pendente";
-
   if (statusFinal !== "Cancelado") {
-    if (inputVendaVal) {
-      statusFinal = "Concluído";
-    } else if (inputRegistroVal) {
-      statusFinal = "Em andamento";
-    } else {
-      statusFinal = "Pendente";
-    }
+    if (inputVendaVal) statusFinal = "Concluído";
+    else if (inputRegistroVal) statusFinal = "Em andamento";
+    else statusFinal = "Pendente";
   }
 
   const dadosAtualizacao = {
@@ -484,7 +567,7 @@ export async function salvarEdicoes(id) {
     cor,
     placa: placa || null,
     valor: novoValor,
-    desconto: novoDesconto, // <-- ADICIONADO AQUI
+    desconto: novoDesconto,
     observacao: textoAutomático,
     observacao_manual: textoUsuario,
     itens_servicos: itensAtualizados,
@@ -501,7 +584,8 @@ export async function salvarEdicoes(id) {
   if (btnExcluir) btnExcluir.disabled = true;
 
   try {
-    if (!supabaseClient) throw new Error("Failed to fetch");
+    if (!supabaseClient || !navigator.onLine) throw new Error("Offline");
+
     const consulta = supabaseClient
       .from("ordens_servico")
       .update(dadosAtualizacao)
@@ -513,15 +597,37 @@ export async function salvarEdicoes(id) {
     Object.assign(osAtual, dadosAtualizacao);
     setItensRascunho(itensAtualizados);
 
-    toast("OS atualizada com sucesso!");
+    await db.ordens_servico.update(id, dadosAtualizacao);
 
+    toast("OS atualizada com sucesso!");
     const { fecharModal } = await import("./ui.js");
     fecharModal({ forcar: true });
     carregarResumoDashboard();
     carregarUltimasOS();
     recarregarListaOS();
   } catch (error) {
-    console.error(error);
+    console.warn(error);
+    if (!navigator.onLine || /fetch|network/i.test(String(error))) {
+      Object.assign(osAtual, dadosAtualizacao);
+      setItensRascunho(itensAtualizados);
+
+      await db.ordens_servico.update(id, dadosAtualizacao);
+      await db.sync_queue.add({
+        osId: id,
+        tipo: "UPDATE",
+        dados: dadosAtualizacao,
+      });
+
+      toast(
+        "Você está offline. As alterações foram salvas e serão sincronizadas quando a internet voltar.",
+        "success",
+      );
+      const { fecharModal } = await import("./ui.js");
+      fecharModal({ forcar: true });
+      recarregarListaOS();
+      return;
+    }
+
     toast(mensagemErro(error, "salvar as alterações"), "error");
     destravar();
     if (btnExcluir) btnExcluir.disabled = false;
@@ -551,10 +657,13 @@ export async function marcarServicoFinalizado(id, status) {
 
 export async function excluirOS(id) {
   const os = listaOS.find((o) => o.id === id);
-  if (!os) {
-    toast("Esta OS não existe mais. Atualize a lista.", "error");
+  if (!os) return;
+
+  if (!navigator.onLine) {
+    toast("Você precisa de internet para excluir uma OS.", "error");
     return;
   }
+
   const qtdFotos = os.fotos_urls?.length || 0;
   const aviso =
     qtdFotos > 0
@@ -572,8 +681,6 @@ export async function excluirOS(id) {
 
   const destravar = travarBotao("btnExcluirOS", "Excluindo…");
   if (!destravar) return;
-  const btnSalvar = document.getElementById("btnSalvarOS");
-  if (btnSalvar) btnSalvar.disabled = true;
 
   try {
     if (!supabaseClient) throw new Error("Failed to fetch");
@@ -585,29 +692,19 @@ export async function excluirOS(id) {
     const { error } = await (sinal ? consulta.abortSignal(sinal) : consulta);
     if (error) throw error;
 
-    let fotosFalharam = false;
     if (qtdFotos > 0) {
       try {
         const arquivos = os.fotos_urls.map(
           (url) => String(url).split("/").pop().split("?")[0],
         );
-        const { error: erroFotos } = await supabaseClient.storage
-          .from("fotos-ordens")
-          .remove(arquivos);
-        if (erroFotos) throw erroFotos;
-      } catch (e) {
-        console.error(e);
-        fotosFalharam = true;
-      }
+        await supabaseClient.storage.from("fotos-ordens").remove(arquivos);
+      } catch (e) {}
     }
-    setListaOS(listaOS.filter((o) => o.id !== id));
-    toast(
-      fotosFalharam
-        ? "OS excluída, mas algumas fotos não puderam ser apagadas."
-        : "OS excluída com sucesso!",
-      fotosFalharam ? "error" : "success",
-    );
 
+    setListaOS(listaOS.filter((o) => o.id !== id));
+    await db.ordens_servico.delete(id);
+
+    toast("OS excluída com sucesso!");
     const { fecharModal } = await import("./ui.js");
     fecharModal({ forcar: true });
     carregarResumoDashboard();
@@ -617,26 +714,69 @@ export async function excluirOS(id) {
     console.error(error);
     toast(mensagemErro(error, "excluir a OS"), "error");
     destravar();
-    if (btnSalvar) btnSalvar.disabled = false;
+  }
+}
+
+// ==========================================
+// BAIXA TUDO PARA O MODO OFFLINE (BACKGROUND)
+// ==========================================
+export async function baixarTudoParaOffline() {
+  if (!supabaseClient || !navigator.onLine) return;
+  try {
+    console.log("Iniciando download completo para o Dexie...");
+    const { data, error } = await supabaseClient
+      .from("ordens_servico")
+      .select("*")
+      .limit(2000);
+    if (error) throw error;
+
+    if (data && data.length > 0) {
+      const norm = data.map(normalizarOS);
+      await db.ordens_servico.bulkPut(norm);
+      console.log(`Sucesso: ${norm.length} OSs salvas offline.`);
+    }
+  } catch (err) {
+    console.error("Erro ao baixar tudo para offline:", err);
   }
 }
 
 if (supabaseClient) {
-  supabaseClient
-    .channel("public:ordens_servico")
-    .on(
-      "postgres_changes",
-      { event: "*", schema: "public", table: "ordens_servico" },
-      (payload) => {
-        console.log(
-          "Realtime: Mudança detectada na tabela ordens_servico.",
-          payload,
-        );
-        const modalAberto = document
-          .getElementById("modalDetalhes")
-          ?.classList.contains("show");
-        if (!modalAberto) carregarDados();
-      },
-    )
-    .subscribe();
+  let canalRealtime = null;
+
+  const conectarRealtime = () => {
+    if (canalRealtime) return;
+    canalRealtime = supabaseClient
+      .channel("public:ordens_servico")
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "ordens_servico" },
+        (payload) => {
+          console.log("Realtime: Mudança detectada.", payload);
+
+          if (payload.new && payload.new.id) {
+            db.ordens_servico
+              .put(normalizarOS(payload.new))
+              .catch((err) => console.error("Erro realtime Dexie:", err));
+          }
+
+          const modalAberto = document
+            .getElementById("modalDetalhes")
+            ?.classList.contains("show");
+          if (!modalAberto) carregarDados();
+        },
+      )
+      .subscribe();
+  };
+
+  const desconectarRealtime = () => {
+    if (!canalRealtime) return;
+    try {
+      supabaseClient.removeChannel(canalRealtime);
+    } catch (_) {}
+    canalRealtime = null;
+  };
+
+  if (navigator.onLine) conectarRealtime();
+  window.addEventListener("online", conectarRealtime);
+  window.addEventListener("offline", desconectarRealtime);
 }

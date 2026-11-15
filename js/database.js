@@ -9,22 +9,31 @@ function arquivoParaBase64(arquivo) {
   });
 }
 
-export async function salvarOSOffline(cadastro, arquivosFotos) {
+export async function salvarOSOffline(cadastro, fotosArray) {
   const fotosBase64 = [];
-  for (const arquivo of arquivosFotos) {
-    const base64 = await arquivoParaBase64(arquivo);
-    fotosBase64.push({ nome: arquivo.name, base64 });
+
+  for (const foto of fotosArray) {
+    const base64Original = await arquivoParaBase64(foto.original);
+    let base64Mini = null;
+    if (foto.miniatura) {
+      base64Mini = await arquivoParaBase64(foto.miniatura);
+    }
+    fotosBase64.push({
+      nome: foto.original.name,
+      base64Original,
+      base64Mini,
+    });
   }
+
   const novaOS = {
     idTemp: Date.now(),
     dados: cadastro,
     fotos: fotosBase64,
   };
+
   let pendentes = JSON.parse(
     localStorage.getItem("@osfacil_pendentes") || "[]",
   );
-
-  // Se por acaso já existir esse UUID na lista, não adiciona de novo
   const jaExiste = pendentes.some(
     (p) => p.dados.uuid_local === cadastro.uuid_local,
   );
@@ -40,6 +49,7 @@ export async function sincronizarPendentes(mostrarToastCallback) {
   );
   if (pendentes.length === 0) return;
   if (!navigator.onLine) return;
+
   const restantes = [];
 
   for (const os of pendentes) {
@@ -47,7 +57,6 @@ export async function sincronizarPendentes(mostrarToastCallback) {
       continue;
     }
     try {
-      // A MÁGICA ACONTECE AQUI: Verifica no banco se esse UUID já foi salvo
       if (os.dados.uuid_local) {
         const { data: existente } = await supabaseClient
           .from("ordens_servico")
@@ -56,23 +65,35 @@ export async function sincronizarPendentes(mostrarToastCallback) {
           .maybeSingle();
 
         if (existente) {
-          // Se já está no banco (a internet caiu mas o servidor salvou), apenas ignora!
-          console.log(
-            "OS já estava salva no banco. Removendo da fila offline.",
-          );
-          continue;
+          continue; // Já está no banco, pula
         }
       }
 
       let urlsDasFotos = [];
       for (const foto of os.fotos) {
-        const res = await fetch(foto.base64);
-        const blob = await res.blob();
+        // Prepara o nome base
         const nomeArquivo = `${Date.now()}-${foto.nome.replace(/[^a-zA-Z0-9.]/g, "_")}`;
-        const { error: uploadError } = await supabaseClient.storage
+        const nomeMini = nomeArquivo.replace(/\.[^/.]+$/, "_thumb.jpg");
+
+        // 1. Upload da Original
+        const resOrig = await fetch(foto.base64Original);
+        const blobOrig = await resOrig.blob();
+        const { error: errOrig } = await supabaseClient.storage
           .from("fotos-ordens")
-          .upload(nomeArquivo, blob);
-        if (uploadError) throw new Error("Erro upload");
+          .upload(nomeArquivo, blobOrig);
+
+        if (errOrig) throw new Error("Erro upload original");
+
+        // 2. Upload da Miniatura (se existir)
+        if (foto.base64Mini) {
+          const resMini = await fetch(foto.base64Mini);
+          const blobMini = await resMini.blob();
+          await supabaseClient.storage
+            .from("fotos-ordens")
+            .upload(nomeMini, blobMini);
+        }
+
+        // 3. Pega a URL da original para salvar no banco
         const { data: urlData } = supabaseClient.storage
           .from("fotos-ordens")
           .getPublicUrl(nomeArquivo);
@@ -83,11 +104,14 @@ export async function sincronizarPendentes(mostrarToastCallback) {
       const { error } = await supabaseClient
         .from("ordens_servico")
         .insert([cadastroFinal]);
+
       if (error) throw error;
     } catch (error) {
+      console.error("Falha ao sincronizar OS offline:", error);
       restantes.push(os);
     }
   }
+
   localStorage.setItem("@osfacil_pendentes", JSON.stringify(restantes));
   if (restantes.length === 0 && pendentes.length > 0 && mostrarToastCallback) {
     mostrarToastCallback("Dados pendentes sincronizados!", "sucesso");

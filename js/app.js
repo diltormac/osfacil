@@ -52,71 +52,51 @@ const CATALOGO_SERVICOS_FALLBACK = [
 function aplicarLogicaPlaca(idInput, idToggle) {
   const inputElement = document.getElementById(idInput);
   const toggleElement = document.getElementById(idToggle);
-
   if (!inputElement) return;
 
   const padraoMercosul = ["L", "L", "L", "N", "L", "N", "N"];
-  const padraoAntigo = ["L", "L", "L", "N", "N", "N", "N"];
 
   function aplicarMascara(e) {
-    // 1. Verifica o estado do Toggle
     const usarMercosul = toggleElement ? toggleElement.checked : true;
 
-    // Se o Toggle estiver DESATIVADO (Modo Livre / Antigo)
     if (!usarMercosul) {
-      // Permite letras e números, converte para maiúsculo, mas NÃO bloqueia nada.
       e.target.value = e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, "");
-      // Garante que o teclado do celular permita letras e números (modo texto)
       e.target.inputMode = "text";
-      return; // Para a execução aqui
+      return;
     }
 
-    // 2. Se o Toggle estiver ATIVADO (Padrão Mercosul)
     let valor = e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, "");
     let formatado = "";
-    const regraAtual = padraoMercosul;
 
-    for (let i = 0; i < valor.length && i < regraAtual.length; i++) {
+    for (let i = 0; i < valor.length && i < padraoMercosul.length; i++) {
       const char = valor[i];
-      const tipoEsperado = regraAtual[i];
+      const tipoEsperado = padraoMercosul[i];
 
-      if (tipoEsperado === "L" && /[A-Z]/.test(char)) {
-        formatado += char;
-      } else if (tipoEsperado === "N" && /[0-9]/.test(char)) {
-        formatado += char;
-      } else {
-        break; // Bloqueia se não for do tipo esperado
-      }
+      if (tipoEsperado === "L" && /[A-Z]/.test(char)) formatado += char;
+      else if (tipoEsperado === "N" && /[0-9]/.test(char)) formatado += char;
+      else break;
     }
 
     e.target.value = formatado;
-
-    // Alterna o teclado (inputmode)
     const proximaPosicao = formatado.length;
-    if (proximaPosicao < regraAtual.length) {
-      const proximoTipo = regraAtual[proximaPosicao];
-      e.target.inputMode = proximoTipo === "L" ? "text" : "numeric";
+    if (proximaPosicao < padraoMercosul.length) {
+      e.target.inputMode =
+        padraoMercosul[proximaPosicao] === "L" ? "text" : "numeric";
     } else {
       e.target.inputMode = "text";
     }
   }
 
   inputElement.addEventListener("input", aplicarMascara);
-
-  // Trata o Backspace para atualizar o teclado
   inputElement.addEventListener("keydown", (e) => {
-    if (e.key === "Backspace") {
-      setTimeout(() => {
-        aplicarMascara({ target: inputElement });
-      }, 10);
-    }
+    if (e.key === "Backspace")
+      setTimeout(() => aplicarMascara({ target: inputElement }), 10);
   });
 
-  // Se o Toggle mudar, limpa o campo e altera o placeholder
   if (toggleElement) {
     toggleElement.addEventListener("change", () => {
       inputElement.value = "";
-      inputElement.inputMode = "text"; // Sempre volta pro texto ao trocar
+      inputElement.inputMode = "text";
       inputElement.placeholder = toggleElement.checked
         ? "Ex: ABC1D23"
         : "Ex: ABC1234 ou Livre";
@@ -125,15 +105,11 @@ function aplicarLogicaPlaca(idInput, idToggle) {
   }
 }
 
-// Inicializa as máscaras quando o DOM estiver pronto
 document.addEventListener("DOMContentLoaded", () => {
   aplicarLogicaPlaca("inputPlacaOpcional", "togglePadraoPlacaOpcional");
   aplicarLogicaPlaca("modalInputPlaca", "togglePadraoPlacaModal");
 });
 
-// ==========================================
-// FUNÇÕES AUXILIARES
-// ==========================================
 function gerarUUID() {
   return "xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx".replace(/[xy]/g, function (c) {
     var r = (Math.random() * 16) | 0,
@@ -178,7 +154,6 @@ async function carregarServicosFormulario() {
   } catch (err) {
     console.warn("Falha ao carregar catálogo do Supabase, usando cache.", err);
   }
-
   try {
     const cache = localStorage.getItem(CATALOGO_SERVICOS_KEY);
     if (cache) {
@@ -190,10 +165,7 @@ async function carregarServicosFormulario() {
         return;
       }
     }
-  } catch (e) {
-    console.warn("Cache de catálogo inválido.", e);
-  }
-
+  } catch (e) {}
   opcoesServico = [...CATALOGO_SERVICOS_FALLBACK];
 }
 
@@ -205,9 +177,7 @@ function formatarValorInput(valorNumerico) {
   return "R$ " + v;
 }
 
-// ==========================================
-// MODAL DE DOCUMENTO (CPF / CNPJ)
-// ==========================================
+// MODAL DOCUMENTO
 const btnAbrirModalDocumento = document.getElementById(
   "btnAbrirModalDocumento",
 );
@@ -301,7 +271,6 @@ async function buscarNomePorDocumento(documento) {
   if (!navigator.onLine) return null;
   const digitos = documento.replace(/\D/g, "");
   if (digitos.length !== 11 && digitos.length !== 14) return null;
-
   try {
     const { data, error } = await supabaseClient
       .from("ordens_servico")
@@ -310,12 +279,10 @@ async function buscarNomePorDocumento(documento) {
       .order("id", { ascending: false })
       .limit(1)
       .maybeSingle();
-
     if (error) throw error;
     if (data && data.nome && data.nome !== "CONSUMIDOR") return data.nome;
     return null;
   } catch (err) {
-    console.warn("Erro ao buscar nome por documento:", err);
     return null;
   }
 }
@@ -333,49 +300,36 @@ if (btnAbrirModalDocumento) {
     }, 150);
   });
 }
-
-if (btnFecharModalDocumento) {
+if (btnFecharModalDocumento)
   btnFecharModalDocumento.addEventListener("click", () =>
     modalDocumento.classList.remove("show"),
   );
-}
-
-if (modalDocumento) {
+if (modalDocumento)
   modalDocumento.addEventListener("click", (e) => {
     if (e.target === modalDocumento) modalDocumento.classList.remove("show");
   });
-}
-
-if (inputDocumentoCliente) {
+if (inputDocumentoCliente)
   inputDocumentoCliente.addEventListener("input", (e) => {
     e.target.value = formatarDocumento(e.target.value);
   });
-}
 
 if (btnSalvarDocumento) {
   btnSalvarDocumento.addEventListener("click", async () => {
     const formatado = inputDocumentoCliente.value.trim();
     const digitos = formatado.replace(/\D/g, "");
-
     if (digitos.length === 0) {
       documentoCliente = "";
       atualizarBotaoDocumento();
       modalDocumento.classList.remove("show");
       return;
     }
-
     if (digitos.length !== 11 && digitos.length !== 14) {
-      mostrarToast(
-        "Documento inválido. CPF = 11 dígitos, CNPJ = 14 dígitos.",
-        "erro",
-      );
+      mostrarToast("Documento inválido.", "erro");
       return;
     }
-
     documentoCliente = formatado;
     atualizarBotaoDocumento();
     modalDocumento.classList.remove("show");
-
     const nomeEncontrado = await buscarNomePorDocumento(formatado);
     if (nomeEncontrado) {
       if (!nome.value.trim()) {
@@ -384,26 +338,20 @@ if (btnSalvarDocumento) {
         atualizarProgresso();
       } else if (
         confirm(
-          `Documento encontrado para "${nomeEncontrado}". Deseja substituir o nome atual?`,
+          `Documento encontrado para "${nomeEncontrado}". Deseja substituir?`,
         )
       ) {
         nome.value = nomeEncontrado;
         atualizarProgresso();
       }
     } else {
-      mostrarToast(
-        "Documento salvo. Nenhum cadastro anterior encontrado.",
-        "sucesso",
-      );
+      mostrarToast("Documento salvo.", "sucesso");
     }
   });
 }
-
 atualizarBotaoDocumento();
 
-// ==========================================
-// MODAL DE ADICIONAR SERVIÇO
-// ==========================================
+// MODAL SERVIÇO
 const btnAdicionarItem = document.getElementById("btnAdicionarItem");
 const containerItens = document.getElementById("containerItensAdicionados");
 const modalAdicionar = document.getElementById("modalAdicionarServico");
@@ -436,24 +384,19 @@ function obterPlacaAtual() {
 
 function atualizarBotaoPlaca() {
   const placa = obterPlacaAtual();
-
-  // Classes base para manter o formato e o tamanho
   const baseClasses =
     "flex-1 h-12 text-xs font-bold rounded-lg transition-colors flex items-center justify-center gap-1.5 shadow-sm";
-
   if (placa) {
-    // Quando tem placa: Verde bem destacado
     btnAdicionarPlaca.className = `${baseClasses} bg-green-500 hover:bg-green-600 text-white border border-green-600`;
     btnAdicionarPlaca.innerHTML = `<i class="fa-solid fa-car"></i> ${placa}`;
   } else {
-    // Quando NÃO tem placa: Azul claro / Índigo com texto escuro e borda (Destaque)
     btnAdicionarPlaca.className = `${baseClasses} bg-indigo-100 hover:bg-indigo-200 text-indigo-700 border border-indigo-300 dark:bg-indigo-600/20 dark:text-indigo-300 dark:border-indigo-500/50 dark:hover:bg-indigo-600/40`;
     btnAdicionarPlaca.innerHTML = `<i class="fa-solid fa-car"></i> Placa`;
   }
 }
+
 btnAdicionarPlaca.onclick = () => {
   inputPlacaOpcional.value = obterPlacaAtual();
-  // Reseta o toggle para Mercosul ao abrir
   const toggle = document.getElementById("togglePadraoPlacaOpcional");
   if (toggle) toggle.checked = true;
   inputPlacaOpcional.placeholder = "Ex: ABC1D23";
@@ -547,11 +490,8 @@ async function aoSelecionarServico(servNome) {
     servUpper.includes("CASTER")
   ) {
     modalGrupoPlaca.classList.remove("hidden");
-
-    // Reseta o toggle de placa do modal para Mercosul
     const toggleModal = document.getElementById("togglePadraoPlacaModal");
     if (toggleModal) toggleModal.checked = true;
-
     const placaExistente = obterPlacaAtual();
     if (placaExistente) {
       modalInputPlaca.value = placaExistente;
@@ -682,7 +622,7 @@ async function buscarProximoNumero(isReforma, inputNum) {
     if (isReforma) numeroOSReforma = inputNum.value;
     else numeroOSConserto = inputNum.value;
   } catch (err) {
-    console.error("Erro ao buscar próximo número da OS", err);
+    console.error(err);
   } finally {
     inputNum.disabled = false;
     inputNum.placeholder = "Digite o número da OS";
@@ -692,7 +632,7 @@ async function buscarProximoNumero(isReforma, inputNum) {
 document.getElementById("btnConfirmarItem").onclick = () => {
   let serv = dropdownServico ? dropdownServico.value : "";
   if (!serv) {
-    mostrarToast("Selecione um serviço antes de adicionar.", "erro");
+    mostrarToast("Selecione um serviço.", "erro");
     return;
   }
 
@@ -722,7 +662,7 @@ document.getElementById("btnConfirmarItem").onclick = () => {
     servUpper.includes("CASTER");
 
   if (isAlinhamento && !modalInputPlaca.value.trim() && !placaAvulsa) {
-    mostrarToast("Por favor, digite a placa do veículo.", "erro");
+    mostrarToast("Digite a placa.", "erro");
     modalInputPlaca.focus();
     return;
   }
@@ -786,18 +726,14 @@ function renderizarItensOS() {
         ${item.numero_os ? `<span class="text-indigo-600 font-medium">Nº OS: ${item.numero_os}</span>` : ""}
         ${item.numero_os_conserto ? `<span class="text-indigo-600 font-medium">Nº OS Conserto: ${item.numero_os_conserto}</span>` : ""}
       </div>
-      <button type="button" onclick="removerItemOS(${index})" class="text-red-500 hover:text-red-700 p-1">
-        <i class="fa-solid fa-trash-can"></i>
-      </button>
-    `;
+      <button type="button" onclick="removerItemOS(${index})" class="text-red-500 hover:text-red-700 p-1"><i class="fa-solid fa-trash-can"></i></button>`;
     containerItens.appendChild(div);
   });
 }
 
 window.removerItemOS = function (index) {
   itensOS.splice(index, 1);
-  if (itensOS.length === 0) {
-  } else {
+  if (itensOS.length > 0) {
     const temPlacaAlgumItem = itensOS.some((i) => i.placa);
     if (!temPlacaAlgumItem && !placaAvulsa) placaAvulsa = "";
   }
@@ -823,14 +759,14 @@ function verificarIdentificacaoAparelho() {
 document.getElementById("btnSalvarIdentificacao").onclick = () => {
   let inputVal = document.getElementById("inputNomeAparelho").value.trim();
   if (inputVal === "") {
-    alert("Por favor, digite um nome válido.");
+    alert("Digite um nome válido.");
     return;
   }
   nomeAparelho = inputVal.toUpperCase();
   localStorage.setItem("@osfacil_aparelho", nomeAparelho);
   document.getElementById("nomeAparelhoDisplay").innerText = nomeAparelho;
   document.getElementById("modalIdentificacao").classList.remove("show");
-  mostrarToast("Aparelho identificado com sucesso!", "sucesso");
+  mostrarToast("Aparelho identificado!", "sucesso");
 };
 
 document.getElementById("triggerAlterarNome").onclick = () => {
@@ -913,13 +849,20 @@ function renderFotos() {
             const file = new File([blob], `foto_${Date.now()}.jpeg`, {
               type: "image/jpeg",
             });
-            fotos.push({ arquivo: file, url: image.dataUrl });
+
+            const resultado = await comprimirImagemWeb(file);
+            fotos.push({
+              arquivo: resultado.original,
+              miniatura: resultado.miniatura,
+              url: image.dataUrl,
+            });
+
             renderFotos();
             validarFotos();
             atualizarProgresso();
           } catch (e) {
-            if (e.message && e.message.toLowerCase().includes("cancel")) return;
-            alert("Erro ao abrir a câmera: " + (e.message || e));
+            if (!e.message?.toLowerCase().includes("cancel"))
+              alert("Erro na câmera: " + (e.message || e));
           }
         } else {
           const input = document.createElement("input");
@@ -930,10 +873,11 @@ function renderFotos() {
             const file = event.target.files[0];
             if (!file) return;
             try {
-              const arquivoLeve = await comprimirImagemWeb(file);
+              const resultado = await comprimirImagemWeb(file);
               fotos.push({
-                arquivo: arquivoLeve,
-                url: URL.createObjectURL(arquivoLeve),
+                arquivo: resultado.original,
+                miniatura: resultado.miniatura,
+                url: URL.createObjectURL(resultado.original),
               });
               renderFotos();
               validarFotos();
@@ -983,7 +927,6 @@ function aplicarMascaraTelefone() {
   validarTelefone();
   atualizarProgresso();
 }
-
 telefone.addEventListener("input", aplicarMascaraTelefone);
 
 function validarNome() {
@@ -1017,11 +960,9 @@ function validarServico() {
   containerItens.classList.toggle("border-red-500", !ok);
   return ok;
 }
-
 function validarObservacao() {
   return true;
 }
-
 function validarFotos() {
   const valido = fotos.length > 0;
   photoSection.classList.toggle("has-error", !valido);
@@ -1046,7 +987,6 @@ nome.addEventListener("input", () => {
   validarNome();
   atualizarProgresso();
 });
-
 observacao.addEventListener("input", () => {
   validarObservacao();
   atualizarProgresso();
@@ -1056,18 +996,18 @@ form.addEventListener("submit", async (event) => {
   event.preventDefault();
   if (isSaving) return;
 
-  const okNome = validarNome();
-  const okTelefone = validarTelefone();
-  const okServico = validarServico();
-  const okObservacao = validarObservacao();
-  const okFotos = validarFotos();
+  const okNome = validarNome(),
+    okTelefone = validarTelefone(),
+    okServico = validarServico(),
+    okObservacao = validarObservacao(),
+    okFotos = validarFotos();
   atualizarProgresso();
 
   if (!okNome || !okTelefone || !okServico || !okObservacao || !okFotos) {
     let msgErro = "Preencha todos os campos obrigatórios (*).";
     if (!okServico) msgErro = "Adicione pelo menos 1 serviço à OS.";
-    if (!okObservacao) msgErro = "Por favor, preencha a descrição do serviço.";
-    if (!okFotos) msgErro = "Por favor, adicione pelo menos 1 foto.";
+    if (!okObservacao) msgErro = "Preencha a descrição do serviço.";
+    if (!okFotos) msgErro = "Adicione pelo menos 1 foto.";
     mostrarToast(msgErro, "erro");
     return;
   }
@@ -1083,22 +1023,20 @@ form.addEventListener("submit", async (event) => {
     : "SEM CONTATO";
   let nomeFinal =
     nome.value.trim() === "" ? "CONSUMIDOR" : nome.value.trim().toUpperCase();
-
   const servicosResumo = itensOS
     .map((i) => i.servico)
     .join(", ")
     .toUpperCase();
   const textoDigitado = observacao.value.trim().toUpperCase();
-
   const placaGeral = itensOS.find((i) => i.placa)?.placa || placaAvulsa;
   const corGeral = itensOS.find((i) => i.cor)?.cor;
 
-  let observacaoFinal = "";
-  if (servicosResumo && textoDigitado)
-    observacaoFinal = `SERVIÇOS: ${servicosResumo} - ${textoDigitado}`;
-  else if (servicosResumo) observacaoFinal = `SERVIÇOS: ${servicosResumo}`;
-  else observacaoFinal = textoDigitado;
-
+  let observacaoFinal =
+    servicosResumo && textoDigitado
+      ? `SERVIÇOS: ${servicosResumo} - ${textoDigitado}`
+      : servicosResumo
+        ? `SERVIÇOS: ${servicosResumo}`
+        : textoDigitado;
   const detalhesExtras = [];
   if (placaGeral) detalhesExtras.push(`PLACA: ${placaGeral}`);
   if (corGeral) detalhesExtras.push(`COR: ${corGeral}`);
@@ -1128,24 +1066,41 @@ form.addEventListener("submit", async (event) => {
     documento: documentoCliente || null,
   };
 
-  const arquivosFotos = fotos.map((f) => f.arquivo);
+  // Prepara o objeto com as fotos para envio (Original e Miniatura)
+  const fotosParaEnviar = fotos.map((f) => ({
+    original: f.arquivo,
+    miniatura: f.miniatura,
+  }));
 
   try {
     if (navigator.onLine) {
       submitButton.innerHTML =
         '<i class="fa-solid fa-spinner fa-spin"></i> ENVIANDO...';
       let urlsDasFotos = [];
-      for (const arquivo of arquivosFotos) {
+
+      for (const foto of fotosParaEnviar) {
         const nomeArquivo = `${Date.now()}-${Math.random().toString(36).substring(2)}.jpeg`;
+        const nomeMini = nomeArquivo.replace(/\.[^/.]+$/, "_thumb.jpg");
+
+        // Sobe Original
         const { error: uploadError } = await supabaseClient.storage
           .from("fotos-ordens")
-          .upload(nomeArquivo, arquivo);
+          .upload(nomeArquivo, foto.original);
         if (uploadError) throw new Error("Erro upload");
+
+        // Sobe Miniatura
+        if (foto.miniatura) {
+          await supabaseClient.storage
+            .from("fotos-ordens")
+            .upload(nomeMini, foto.miniatura);
+        }
+
         const { data: urlData } = supabaseClient.storage
           .from("fotos-ordens")
           .getPublicUrl(nomeArquivo);
         urlsDasFotos.push(urlData.publicUrl);
       }
+
       const cadastroFinal = { ...cadastro, fotos_urls: urlsDasFotos };
       const { error } = await supabaseClient
         .from("ordens_servico")
@@ -1153,7 +1108,7 @@ form.addEventListener("submit", async (event) => {
       if (error) throw error;
       mostrarToast("Pré-cadastro enviado com sucesso!", "sucesso");
     } else {
-      await salvarOSOffline(cadastro, arquivosFotos);
+      await salvarOSOffline(cadastro, fotosParaEnviar);
       mostrarToast("Sem internet. Salvo no celular com segurança!", "sucesso");
     }
 
@@ -1187,7 +1142,8 @@ form.addEventListener("submit", async (event) => {
       "Erro ao enviar (conexão instável). Salvando no celular...",
       "erro",
     );
-    await salvarOSOffline(cadastro, arquivosFotos);
+    await salvarOSOffline(cadastro, fotosParaEnviar);
+
     form.reset();
     itensOS = [];
     renderizarItensOS();
@@ -1219,6 +1175,7 @@ form.addEventListener("submit", async (event) => {
   }
 });
 
+// BUSCA E MODAL DE IMAGENS
 document.getElementById("btnFecharPesquisa").onclick = () =>
   document.getElementById("modalPesquisa").classList.add("hidden");
 let timeoutBusca = null;
@@ -1233,11 +1190,11 @@ async function executarBusca() {
   const listaResultados = document.getElementById("listaResultados");
 
   if (!termo) {
-    listaResultados.innerHTML = `<div class="text-center py-10 text-slate-400 text-xs"><i class="fa-solid fa-clipboard text-2xl mb-2 text-slate-300"></i><p>Digite algo para pesquisar os serviços salvos.</p></div>`;
+    listaResultados.innerHTML = `<div class="text-center py-10 text-slate-400 text-xs"><i class="fa-solid fa-clipboard text-2xl mb-2 text-slate-300"></i><p>Digite algo para pesquisar.</p></div>`;
     return;
   }
 
-  listaResultados.innerHTML = `<div class="text-center py-6 text-slate-400 text-xs"><i class="fa-solid fa-spinner fa-spin text-lg mb-2"></i><p>Buscando ordens...</p></div>`;
+  listaResultados.innerHTML = `<div class="text-center py-6 text-slate-400 text-xs"><i class="fa-solid fa-spinner fa-spin text-lg mb-2"></i><p>Buscando...</p></div>`;
 
   timeoutBusca = setTimeout(async () => {
     let ordens = [];
@@ -1259,7 +1216,7 @@ async function executarBusca() {
           }));
         }
       } catch (e) {
-        console.error("Erro ao buscar no Supabase", e);
+        console.error(e);
       }
     }
     const pendentes = JSON.parse(
@@ -1272,12 +1229,12 @@ async function executarBusca() {
         ordens.push({
           id: `Local #${p.idTemp}`,
           dados: p.dados,
-          fotosUrls: p.fotos.map((f) => f.base64),
+          fotosUrls: p.fotos.map((f) => f.base64Original),
         });
     });
 
     if (ordens.length === 0) {
-      listaResultados.innerHTML = `<div class="text-center py-10 text-slate-400 text-xs"><i class="fa-solid fa-face-frown text-2xl mb-2 text-slate-300"></i><p>Nenhuma ordem de serviço encontrada.</p></div>`;
+      listaResultados.innerHTML = `<div class="text-center py-10 text-slate-400 text-xs"><i class="fa-solid fa-face-frown text-2xl mb-2 text-slate-300"></i><p>Nenhuma OS encontrada.</p></div>`;
       return;
     }
 
@@ -1287,6 +1244,7 @@ async function executarBusca() {
       const card = document.createElement("div");
       card.className =
         "bg-white border border-slate-200 rounded-xl p-3 shadow-sm flex flex-col gap-2";
+
       let fotosHtml = "";
       if (os.fotosUrls && os.fotosUrls.length > 0) {
         fotosHtml = `<div class="flex gap-1.5 overflow-x-auto py-1">`;
@@ -1299,8 +1257,9 @@ async function executarBusca() {
         });
         fotosHtml += `</div>`;
       } else {
-        fotosHtml = `<span class="text-[10px] text-slate-400 italic">Sem fotos registradas.</span>`;
+        fotosHtml = `<span class="text-[10px] text-slate-400 italic">Sem fotos.</span>`;
       }
+
       const telefoneExibir =
         d.telefone && d.telefone.trim() !== "+55" && d.telefone.trim() !== ""
           ? d.telefone
@@ -1326,10 +1285,10 @@ async function executarBusca() {
         <div class="mt-1">
           <span class="text-[10px] font-bold text-slate-500 block mb-1">Imagens do Serviço:</span>
           ${fotosHtml}
-        </div>
-      `;
+        </div>`;
       listaResultados.appendChild(card);
     });
+
     document.querySelectorAll(".img-mini").forEach((imgEl) => {
       imgEl.onclick = () => {
         const galeria = JSON.parse(imgEl.getAttribute("data-galeria"));

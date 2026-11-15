@@ -7,6 +7,7 @@ import {
 } from "../state.js";
 import { esc, urlSegura, numeroExibicao } from "../utils.js";
 import { estadoHTML, estadoCarregando } from "./estados.js";
+import { aplicarMiniaturasNaTela } from "./helpers.js";
 
 function botaoCarregarMaisGaleria() {
   if (!temMaisGaleria) return "";
@@ -14,11 +15,11 @@ function botaoCarregarMaisGaleria() {
     ? '<i class="fa-solid fa-spinner fa-spin" aria-hidden="true"></i> Carregando…'
     : '<i class="fa-solid fa-plus" aria-hidden="true"></i> Carregar mais';
   return `
-    <div class="flex justify-center py-4 col-span-full">
-      <button type="button" onclick="carregarMaisGaleria()" ${carregandoMaisGaleria ? "disabled" : ""} class="px-5 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg text-xs font-bold transition shadow-sm disabled:opacity-60 disabled:cursor-not-allowed">
-        ${rotulo}
-      </button>
-    </div>`;
+      <div class="flex justify-center py-4 col-span-full">
+        <button type="button" onclick="carregarMaisGaleria()" ${carregandoMaisGaleria ? "disabled" : ""} class="px-5 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg text-xs font-bold transition shadow-sm disabled:opacity-60 disabled:cursor-not-allowed">
+          ${rotulo}
+        </button>
+      </div>`;
 }
 
 export function renderGaleria() {
@@ -57,19 +58,21 @@ export function renderGaleria() {
     todasFotos
       .map(
         ({ os, url, index }) => `
-    <div class="galeria-card relative group cursor-pointer overflow-hidden rounded-[10px]" data-os-id="${os.id}" data-foto-index="${index}">
-      <img src="${urlSegura(url)}" alt="Foto ${index + 1} da OS ${esc(numeroExibicao(os))} — ${esc(os.nome)}" loading="lazy" decoding="async" class="os-foto photo-thumb w-full h-full object-cover cursor-pointer transition-transform duration-300 group-hover:scale-110">
-      
-      <button type="button" class="btn-lupa absolute top-1.5 right-1.5 w-7 h-7 rounded-full bg-black/50 hover:bg-black/70 text-white flex items-center justify-center opacity-0 group-hover:opacity-100 transition z-10" title="Ver foto em tela cheia" aria-label="Ver foto ${index + 1} em tela cheia">
-        <i class="fa-solid fa-search-plus text-[11px]" aria-hidden="true"></i>
-      </button>
-      
-      <div class="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/70 to-transparent p-2 rounded-b-[10px] opacity-0 group-hover:opacity-100 transition pointer-events-none">
-        <p class="text-[10px] font-bold text-white truncate">${esc(os.nome) || "Sem nome"}</p>
-        <p class="text-[9px] text-white/70 truncate">${esc(numeroExibicao(os))} (${index + 1}/${os.fotos_urls.length})</p>
+            <div class="galeria-card relative group cursor-pointer overflow-hidden rounded-[10px]" data-os-id="${os.id}" data-foto-index="${index}">
+        <!-- ADICIONE O data-original-url AQUI -->
+        <img src="${urlSegura(url)}" data-original-url="${urlSegura(url)}" alt="Foto ${index + 1} da OS ${esc(numeroExibicao(os))} — ${esc(os.nome)}" loading="lazy" decoding="async" class="os-foto photo-thumb w-full h-full object-cover cursor-pointer transition-transform duration-300 group-hover:scale-110">
+        
+        
+        <button type="button" class="btn-lupa absolute top-1.5 right-1.5 w-7 h-7 rounded-full bg-black/50 hover:bg-black/70 text-white flex items-center justify-center opacity-0 group-hover:opacity-100 transition z-10" title="Ver foto em tela cheia" aria-label="Ver foto ${index + 1} em tela cheia">
+          <i class="fa-solid fa-search-plus text-[11px]" aria-hidden="true"></i>
+        </button>
+        
+        <div class="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/70 to-transparent p-2 rounded-b-[10px] opacity-0 group-hover:opacity-100 transition pointer-events-none">
+          <p class="text-[10px] font-bold text-white truncate">${esc(os.nome) || "Sem nome"}</p>
+          <p class="text-[9px] text-white/70 truncate">${esc(numeroExibicao(os))} (${index + 1}/${os.fotos_urls.length})</p>
+        </div>
       </div>
-    </div>
-  `,
+    `,
       )
       .join("") + botaoCarregarMaisGaleria();
 
@@ -100,4 +103,7 @@ export function renderGaleria() {
       });
     }
   });
+
+  // ADICIONE ESTA LINHA NO FINAL:
+  aplicarMiniaturasNaTela();
 }

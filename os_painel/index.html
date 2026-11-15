@@ -7,6 +7,31 @@
       content="width=device-width, initial-scale=1.0, maximum-scale=5.0"
     />
     <title>OS Fácil — Painel de Ordens de Serviço</title>
+
+    <!-- ================= PWA ================= -->
+    <link rel="manifest" href="manifest.webmanifest" />
+    <meta name="theme-color" content="#0f172a" />
+    <meta name="application-name" content="OS Fácil" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta
+      name="apple-mobile-web-app-status-bar-style"
+      content="black-translucent"
+    />
+    <meta name="apple-mobile-web-app-title" content="OS Fácil" />
+    <link
+      rel="icon"
+      type="image/png"
+      sizes="192x192"
+      href="assets/icon-192.png"
+    />
+    <link
+      rel="icon"
+      type="image/png"
+      sizes="512x512"
+      href="assets/icon-512.png"
+    />
+    <link rel="apple-touch-icon" href="assets/icon-192.png" />
+    <!-- ======================================= -->
     <script src="https://cdn.tailwindcss.com"></script>
     <link
       rel="stylesheet"
@@ -25,6 +50,9 @@
     <script src="https://cdn.jsdelivr.net/npm/flatpickr/dist/l10n/pt.js"></script>
     <style>
       body.is-electron .esconder-no-electron {
+        display: none !important;
+      }
+      body.is-desktop .esconder-no-pc {
         display: none !important;
       }
     </style>
@@ -62,7 +90,7 @@
         </button>
       </div>
 
-      <div class="px-3 pt-3">
+      <div class="px-3 pt-3 esconder-no-pc">
         <button
           onclick="window.location.href = '../index.html'"
           class="esconder-no-electron w-full flex items-center gap-2 px-3 py-2 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white shadow-md text-sm font-semibold transition-colors"
@@ -676,7 +704,6 @@
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
-
     <!-- SETUP DO PLUGIN CAMERA (Capacitor) -->
     <script>
       (function setupCamera() {
@@ -696,6 +723,9 @@
         }
       })();
     </script>
+
+    <!-- REGISTRO DO SERVICE WORKER (só roda no navegador) -->
+    <script src="js/registrar-sw.js"></script>
 
     <!-- MÓDULO PRINCIPAL -->
     <script type="module" src="js/main.js"></script>

@@ -1,0 +1,75 @@
+Caminho da pasta: C:\Users\Dilson\Documents\GitHub\AppCadastro 
+Listagem de caminhos de pasta para o volume Acer
+O número de série do volume é 22FF-8A69
+C:.
+|   apple-touch-icon.png
+|   favicon-32x32.png
+|   gerar_lista.bat
+|   icon-192-maskable.png
+|   icon-192.png
+|   icon-512-maskable.png
+|   icon-512.png
+|   index.html
+|   lista_arquivos.txt
+|   manifest.json
+|   service-worker.js
+|   
++---css
+|       styles.css
+|       
++---js
+|       app.js
+|       camera.js
+|       database.js
+|       dropdownCustom.js
+|       supabase.js
+|       
+\---os_painel
+    |   gerador-icones.html
+    |   index.html
+    |   manifest.webmanifest
+    |   offline.html
+    |   service-worker.js
+    |   
+    +---assets
+    |       icon-192.png
+    |       icon-512.png
+    |       icon-maskable-512.png
+    |       icone.png
+    |       logo.png
+    |       logo1.png
+    |       
+    +---css
+    |       e.maxDepthhl,this.forceChown=e.forc.txt
+    |       style.css
+    |       
+    \---js
+        |   api.js
+        |   catalogoStore.js
+        |   compartilhamento.js
+        |   config.js
+        |   db.js
+        |   main.js
+        |   registrar-sw.js
+        |   state.js
+        |   ui.js
+        |   utils.js
+        |   
+        \---views
+                acoes.js
+                dashboard.js
+                dropdownCustom.js
+                estados.js
+                faturamento.js
+                galeria.js
+                helpers.js
+                lightbox.js
+                listaOS - Copia.js
+                listaOS.js
+                modalAdicionarItem.js
+                modalCatalogo.js
+                modalEditarOS.js
+                modalFotosOS.js
+                relatorio.js
+                sidebar.js
+                

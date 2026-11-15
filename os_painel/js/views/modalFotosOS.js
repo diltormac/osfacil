@@ -1,6 +1,7 @@
 // js/views/modalFotosOS.js
 import { supabaseClient } from "../config.js";
 import { listaOS, setListaOS } from "../state.js";
+import { db } from "../db.js";
 import {
   esc,
   urlSegura,
@@ -8,6 +9,7 @@ import {
   confirmarAcao,
   mensagemErro,
 } from "../utils.js";
+import { aplicarMiniaturasNaTela } from "./helpers.js"; // <-- IMPORTANTE: Importa a mágica
 
 const BUCKET = "fotos-ordens";
 const MAX_FOTOS = 10;
@@ -16,18 +18,12 @@ const TIPOS_ACEITOS = ["image/jpeg", "image/png", "image/webp", "image/jpg"];
 
 /* =========================================================
    DETECÇÃO E REGISTRO DO PLUGIN CAPACITOR (Camera)
-   O painel NÃO tem o setup inline do index.html do cadastro,
-   então registramos aqui.
    ========================================================= */
 function obterPluginCamera() {
   if (!window.Capacitor) return null;
-
-  // Já registrado (ex.: pelo index.html do cadastro, se for o mesmo WebView)
   if (window.Camera && typeof window.Camera.getPhoto === "function") {
     return window.Camera;
   }
-
-  // Tenta registrar via Capacitor.registerPlugin
   if (typeof window.Capacitor.registerPlugin === "function") {
     try {
       const Camera = window.Capacitor.registerPlugin("Camera");
@@ -37,13 +33,10 @@ function obterPluginCamera() {
       console.warn("Não foi possível registrar o plugin Camera.", e);
     }
   }
-
-  // Fallback: alguns builds expõem em Capacitor.Plugins
   if (window.Capacitor.Plugins && window.Capacitor.Plugins.Camera) {
     window.Camera = window.Capacitor.Plugins.Camera;
     return window.Camera;
   }
-
   return null;
 }
 
@@ -52,11 +45,9 @@ function ehNativo() {
 }
 
 /* =========================================================
-   COMPRESSÃO DE IMAGEM (igual ao camera.js do cadastro)
-   - Redimensiona para no máximo 1024x1024
-   - Converte para JPEG qualidade 0.7
+   COMPRESSÃO DE IMAGEM E GERAÇÃO DE MINIATURA
    ========================================================= */
-function comprimirImagemWeb(arquivo) {
+export function comprimirImagemWeb(arquivo) {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
     reader.readAsDataURL(arquivo);
@@ -64,34 +55,73 @@ function comprimirImagemWeb(arquivo) {
       const img = new Image();
       img.src = event.target.result;
       img.onload = () => {
-        const canvas = document.createElement("canvas");
-        const MAX_WIDTH = 1024;
-        const MAX_HEIGHT = 1024;
+        // 1. Gera a Original (150KB)
+        const canvasOriginal = document.createElement("canvas");
         let width = img.width;
         let height = img.height;
-
+        const MAX = 1024;
         if (width > height) {
-          if (width > MAX_WIDTH) {
-            height *= MAX_WIDTH / width;
-            width = MAX_WIDTH;
+          if (width > MAX) {
+            height *= MAX / width;
+            width = MAX;
           }
         } else {
-          if (height > MAX_HEIGHT) {
-            width *= MAX_HEIGHT / height;
-            height = MAX_HEIGHT;
+          if (height > MAX) {
+            width *= MAX / height;
+            height = MAX;
           }
         }
-        canvas.width = width;
-        canvas.height = height;
-        const ctx = canvas.getContext("2d");
-        ctx.drawImage(img, 0, 0, width, height);
-        canvas.toBlob(
-          (blob) =>
-            resolve(
-              new File([blob], arquivo.name.replace(/\.\w+$/, ".jpg"), {
-                type: "image/jpeg",
-              }),
-            ),
+        canvasOriginal.width = width;
+        canvasOriginal.height = height;
+        canvasOriginal.getContext("2d").drawImage(img, 0, 0, width, height);
+
+        canvasOriginal.toBlob(
+          (blobOriginal) => {
+            const fileOriginal = new File([blobOriginal], arquivo.name, {
+              type: "image/jpeg",
+            });
+
+            // 2. Gera a Miniatura (10KB)
+            const canvasMini = document.createElement("canvas");
+            let minW = img.width;
+            let minH = img.height;
+            const MAX_MINI = 300;
+            if (minW > minH) {
+              if (minW > MAX_MINI) {
+                minH *= MAX_MINI / minW;
+                minW = MAX_MINI;
+              }
+            } else {
+              if (minH > MAX_MINI) {
+                minW *= MAX_MINI / minH;
+                minH = MAX_MINI;
+              }
+            }
+            canvasMini.width = minW;
+            canvasMini.height = minH;
+            canvasMini.getContext("2d").drawImage(img, 0, 0, minW, minH);
+
+            canvasMini.toBlob(
+              (blobMini) => {
+                // Cria o arquivo de miniatura com o sufixo _thumb
+                const nomeMini = arquivo.name.replace(
+                  /\.[^/.]+$/,
+                  "_thumb.jpg",
+                );
+                const fileMini = new File([blobMini], nomeMini, {
+                  type: "image/jpeg",
+                });
+
+                resolve({
+                  original: fileOriginal,
+                  miniatura: fileMini,
+                  blobMini,
+                });
+              },
+              "image/jpeg",
+              0.6,
+            );
+          },
           "image/jpeg",
           0.7,
         );
@@ -104,47 +134,36 @@ function comprimirImagemWeb(arquivo) {
 
 /* =========================================================
    CAPTURA DE FOTO
-   - APK: Camera.getPhoto (nativo)
-   - WEB: <input type="file" capture="environment">
-   Retorna um File já comprimido, ou null se cancelar.
    ========================================================= */
 async function capturarFoto() {
   const Camera = obterPluginCamera();
 
-  // ---------- 1) APK (Capacitor) ----------
   if (ehNativo() && Camera) {
     try {
       const image = await Camera.getPhoto({
         quality: 70,
         allowEditing: false,
         resultType: "dataUrl",
-        source: "CAMERA", // CAMERA | PHOTOS | PROMPT
+        source: "CAMERA",
       });
-
-      // Converte dataUrl → Blob → File
       const res = await fetch(image.dataUrl);
       const blob = await res.blob();
       const file = new File([blob], `foto_${Date.now()}.jpeg`, {
         type: "image/jpeg",
       });
-
-      // Comprime (igual ao cadastro)
-      return await comprimirImagemWeb(file);
+      return await comprimirImagemWeb(file); // Retorna o objeto { original, miniatura, blobMini }
     } catch (e) {
-      if (e && e.message && e.message.toLowerCase().includes("cancel")) {
-        return null; // usuário cancelou
-      }
+      if (e && e.message && e.message.toLowerCase().includes("cancel"))
+        return null;
       console.warn("Erro na câmera nativa, tentando input file.", e);
-      // Cai para o fluxo web abaixo
     }
   }
 
-  // ---------- 2) WEB (input file) ----------
   return new Promise((resolve) => {
     const input = document.createElement("input");
     input.type = "file";
     input.accept = "image/*";
-    input.capture = "environment"; // abre câmera traseira no mobile web
+    input.capture = "environment";
     input.style.display = "none";
 
     input.onchange = async (e) => {
@@ -153,21 +172,18 @@ async function capturarFoto() {
       if (!file) return resolve(null);
 
       try {
-        const comprimido = await comprimirImagemWeb(file);
-        resolve(comprimido);
+        const resultado = await comprimirImagemWeb(file);
+        resolve(resultado); // Retorna o objeto { original, miniatura, blobMini }
       } catch (err) {
         console.error("Falha ao comprimir imagem:", err);
-        // Se falhar a compressão, devolve o original
-        resolve(file);
+        resolve({ original: file, miniatura: file, blobMini: null }); // Fallback de segurança
       }
     };
 
-    // Se o usuário fechar o seletor sem escolher
     input.oncancel = () => {
       input.remove();
       resolve(null);
     };
-
     document.body.appendChild(input);
     input.click();
   });
@@ -185,17 +201,16 @@ function gerarNomeArquivo(osId, file) {
 
 function validarArquivo(file) {
   if (!file) return "Nenhum arquivo selecionado.";
-  if (!TIPOS_ACEITOS.includes(file.type)) {
+  if (!TIPOS_ACEITOS.includes(file.type))
     return "Formato inválido. Use JPG, PNG ou WEBP.";
-  }
-  if (file.size > TAMANHO_MAX_MB * 1024 * 1024) {
+  if (file.size > TAMANHO_MAX_MB * 1024 * 1024)
     return `Arquivo muito grande. Máximo ${TAMANHO_MAX_MB}MB.`;
-  }
   return null;
 }
 
-async function uploadFoto(osId, file) {
-  const nome = gerarNomeArquivo(osId, file);
+// Função de Upload atualizada para aceitar um nome personalizado (para a miniatura)
+async function uploadFoto(osId, file, nomeCustom = null) {
+  const nome = nomeCustom || gerarNomeArquivo(osId, file);
   const { error } = await supabaseClient.storage
     .from(BUCKET)
     .upload(nome, file, {
@@ -205,7 +220,6 @@ async function uploadFoto(osId, file) {
     });
 
   if (error) throw error;
-
   const { data } = supabaseClient.storage.from(BUCKET).getPublicUrl(nome);
   return data.publicUrl;
 }
@@ -215,7 +229,6 @@ async function salvarFotosNoBanco(osId, fotosUrls) {
     .from("ordens_servico")
     .update({ fotos_urls: fotosUrls })
     .eq("id", osId);
-
   if (error) throw error;
 }
 
@@ -264,7 +277,6 @@ export async function adicionarFotosOS(osId) {
     toast("Esta OS não existe mais. Atualize a lista.", "error");
     return;
   }
-
   if (!supabaseClient) {
     toast("Sem conexão com o servidor. Não é possível enviar fotos.", "error");
     return;
@@ -272,19 +284,17 @@ export async function adicionarFotosOS(osId) {
 
   const fotosAtuais = Array.isArray(os.fotos_urls) ? os.fotos_urls : [];
   if (fotosAtuais.length >= MAX_FOTOS) {
-    toast(
-      `Limite de ${MAX_FOTOS} fotos por OS atingido. Exclua alguma antes.`,
-      "error",
-    );
+    toast(`Limite de ${MAX_FOTOS} fotos por OS atingido.`, "error");
     return;
   }
 
-  // 1) Captura a foto (câmera nativa no APK / input no Web)
-  const arquivo = await capturarFoto();
-  if (!arquivo) return; // cancelou
+  // 1) Captura a foto (Retorna o objeto { original, miniatura, blobMini })
+  const resultado = await capturarFoto();
+  if (!resultado) return;
+  const { original, miniatura, blobMini } = resultado;
 
-  // 2) Valida
-  const erroValidacao = validarArquivo(arquivo);
+  // 2) Valida a imagem original
+  const erroValidacao = validarArquivo(original);
   if (erroValidacao) {
     toast(erroValidacao, "error");
     return;
@@ -294,12 +304,28 @@ export async function adicionarFotosOS(osId) {
   const overlay = criarOverlayProgresso();
   document.body.appendChild(overlay);
   const txt = overlay.querySelector("[data-role='status']");
-  txt.textContent = `Enviando foto... (${arquivo.name})`;
+  txt.textContent = `Enviando foto... (${original.name})`;
 
   try {
-    const url = await uploadFoto(osId, arquivo);
-    const novasUrls = [...fotosAtuais, url];
+    // Gera os nomes baseados no nome do arquivo original
+    const nomeOriginal = gerarNomeArquivo(osId, original);
+    const nomeMini = nomeOriginal.replace(/\.[^/.]+$/, "_thumb.jpg");
 
+    // Sobe a original
+    const urlOriginal = await uploadFoto(osId, original, nomeOriginal);
+    // Sobe a miniatura
+    await uploadFoto(osId, miniatura, nomeMini);
+
+    // Salva a miniatura local no Dexie
+    if (blobMini) {
+      await db.miniaturas_fotos.put({
+        url: urlOriginal,
+        os_id: osId,
+        blob: blobMini,
+      });
+    }
+
+    const novasUrls = [...fotosAtuais, urlOriginal];
     await salvarFotosNoBanco(osId, novasUrls);
 
     os.fotos_urls = novasUrls;
@@ -339,14 +365,25 @@ export async function excluirFotoOS(osId, urlFoto) {
   const novasUrls = fotosAtuais.filter((u) => u !== urlFoto);
 
   try {
+    // Apaga a original do storage
     await deletarArquivoStorage(urlFoto);
+
+    // Apaga a miniatura do storage
+    const nomeMini = urlFoto
+      .split("/")
+      .pop()
+      .replace(/\.[^/.]+$/, "_thumb.jpg");
+    await deletarArquivoStorage(nomeMini);
+
+    // Apaga a miniatura do Dexie local
+    await db.miniaturas_fotos.delete(urlFoto);
+
     await salvarFotosNoBanco(osId, novasUrls);
 
     os.fotos_urls = novasUrls;
     setListaOS([...listaOS]);
 
     toast("Foto excluída com sucesso!");
-
     atualizarGaleriaNoModal(os, novasUrls);
   } catch (err) {
     console.error(err);
@@ -378,7 +415,8 @@ export function fotosOSHTML(os) {
       const seguro = urlSegura(url);
       return `
         <div class="relative group rounded-[10px] overflow-hidden border border-slate-200 bg-slate-100 aspect-square">
-          <img src="${seguro}" alt="Foto ${idx + 1} da OS"
+          <!-- ADICIONADO O data-original-url PARA A MÁGICA FUNCIONAR -->
+          <img src="${seguro}" data-original-url="${seguro}" alt="Foto ${idx + 1} da OS"
             loading="lazy" decoding="async"
             class="w-full h-full object-cover cursor-pointer transition-transform duration-300 group-hover:scale-110 os-foto"
             onclick="abrirLightboxPorOS(${os.id}, ${idx})" />
@@ -409,6 +447,9 @@ export function fotosOSHTML(os) {
       </button>
     `
     : "";
+
+  // Chama a mágica para buscar as miniaturas no Dexie e trocar na tela
+  setTimeout(() => aplicarMiniaturasNaTela(), 50);
 
   return `
     <div id="modalFotosGrid" class="grid grid-cols-3 sm:grid-cols-4 gap-2 mb-2">
